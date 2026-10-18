@@ -19,11 +19,11 @@ RESULTS_PATH = os.path.join(HERE, "check_results.json")
 METRIC_RESULTS_PATH = os.path.join(HERE, "metric_results.json")
 ALARM_LOG = os.path.join(HERE, "alarms.jsonl")
 DEFAULT_ROOT = os.path.expanduser("~/Downloads/pmdata")
-BANNER = ("Demo: real Fitbit data (resting heart rate, sleep) from volunteers who took nothing. "
+BANNER = ("Real Fitbit data from volunteers who took nothing. "
           "Start date, schedule and any effect shown are simulated.")
 SIMULATED = "Simulated effect"
 CLUSTER_ALPHA = 0.05   # the roster line calls a cluster when P(this many or more) falls below this
-METHOD_LABELS = {"reference": "Reference group (default)", "own_baseline": "Own baseline (comparator)"}
+METHOD_LABELS = {"reference": "Other people's compound-free data", "own_baseline": "This person's 60 days only"}
 
 st.set_page_config(page_title="Compound monitor", layout="wide")
 
@@ -49,7 +49,7 @@ PRESETS = {
 def apply_preset(name: str) -> None:
     for k, v in PRESETS[name].items():
         st.session_state[k] = v
-    st.session_state["mode"] = "Monitor"
+    st.session_state["trial_on"] = False
     st.session_state["start_day"] = 60
     st.session_state[f"today_{PRESETS[name]['person']}_{PRESETS[name]['metric_key']}_60"] = 0
 
@@ -165,120 +165,102 @@ def direction_word(metric) -> str:
 
 
 # ---------------------------------------------------------------- sidebar
-st.warning(BANNER, icon="⚠️")
+st.caption(BANNER)
 
 sb = st.sidebar
 with sb.container(border=True):
     st.markdown("**Demo presets**")
     for _name in PRESETS:
         st.button(_name, on_click=apply_preset, args=(_name,))
-page = sb.radio("Page", ["Roster", "Person", "Results: both metrics"], key="page")
-metric_key = sb.selectbox("Metric", list(L.METRICS), format_func=lambda k: L.METRICS[k][1], key="metric_key")
-root = sb.text_input("PMData root", DEFAULT_ROOT)
-compound = sb.text_input("Compound name", "Compound A")
+main = sb.container()
+settings = sb.expander("Settings")
+
+page = main.radio("Page", ["Roster", "Person", "Results"], key="page", horizontal=True)
+metric_key = main.selectbox("Metric", list(L.METRICS), format_func=lambda k: L.METRICS[k][1], key="metric_key")
 metric = L.METRICS[metric_key][0]
-with sb.container(border=True):
-    st.markdown("**Metric** (fixed before any data is looked at)")
-    st.markdown(f"- name: `{metric.name}`\n- unit: {metric.unit}\n- works: **{metric.works_direction}**\n"
-                f"- harm: **{metric.harm_direction}**\n- onset: {metric.onset_days} days")
 
-st.session_state.setdefault("start_day", 60)
-start_day = int(sb.number_input("Start day (days after first date)", min_value=E.MIN_BEFORE, step=1,
-                                key="start_day"))
-
+root = DEFAULT_ROOT
 if not os.path.isdir(root):
-    st.error(f"PMData root not found: {root}")
-    st.stop()
+    root = main.text_input("Where is the PMData folder?", DEFAULT_ROOT, key="root")
+    if not os.path.isdir(root):
+        st.error(f"PMData folder not found: {root}")
+        st.stop()
+compound = settings.text_input("Compound name", "Compound A")
+st.session_state.setdefault("start_day", 60)
+start_day = int(settings.number_input("Compound start (days after first date)", min_value=E.MIN_BEFORE, step=1,
+                                      key="start_day"))
 subjects, skipped, lib = cohort(root, start_day, metric_key)
 if not subjects:
     st.error("No subject supports this start day.")
     st.stop()
 by_id = {s.subject_id: s for s in subjects}
 ids = list(by_id)
-coverage_label = {pid: f"{pid} · {by_id[pid].series.notna().mean():.0%} coverage" for pid in ids}
 if st.session_state.get("person") not in ids:
     st.session_state["person"] = "p01" if "p01" in ids else ids[0]
-person = sb.selectbox("Person", ids, format_func=coverage_label.get, key="person")
+person = main.selectbox("Person", ids, key="person")
 
 M_ = measured(metric_key)
 if M_ is None:
     st.error(f"No validation results for {L.METRICS[metric_key][1]}. Run: python validate_metrics.py --root {root}")
     st.stop()
-with sb.expander("Harm limit settings"):
-    method = st.radio(
-        "Harm limit", list(METHOD_LABELS),
-        format_func=lambda m: f"{METHOD_LABELS[m]} · measured {M_[m]['fp']:.0%} false alarms",
-        help="The own-baseline limit is the comparator: its h is lower, so it catches more and "
-             "false-alarms more. The reference limit is the one whose stated rate matches what it does.")
+method = settings.radio(
+    "Alarm line set from", list(METHOD_LABELS),
+    format_func=lambda m: f"{METHOD_LABELS[m]} · {M_[m]['fp']:.0%} false alarms",
+    help="Either way, every day is scored against this person's own normal. This only sets how high the "
+         "running tally must climb before it alarms.")
 
-mode = sb.radio("Mode", ["Monitor", "Monitor + on/off trial"], key="mode")
+trial_on = main.toggle("On/off trial: is it working?", key="trial_on")
 trial = None
-if mode != "Monitor":
+if trial_on:
     subj0 = by_id[person]
     rec_end = subj0.series.last_valid_index()
     fit_max = E.max_cycles(subj0.start, rec_end)
     default_n = E.DEFAULT_CYCLES if fit_max >= E.DEFAULT_CYCLES else max(E.MIN_CYCLES, fit_max)
-    with sb.container(border=True):
-        st.markdown(f"**On/off trial for {person}**")
-        n_cycles = int(st.number_input("Number of cycles", min_value=1, max_value=12, value=default_n, step=1,
-                                       key=f"ncyc_{person}_{start_day}_{metric_key}"))
-        st.caption(f"Default {E.DEFAULT_CYCLES} cycles (two of slack). This record fits at most {fit_max} "
-                   f"from day {start_day}.")
-        if st.button("Randomise schedule"):
-            st.session_state["sched_seed"] = st.session_state.get("sched_seed", 0) + 1
-        seed = st.session_state.get("sched_seed", 0)
-        sc = schedule_check_cached(root, start_day, person, n_cycles, metric_key)
-        md_txt = f"{sc.min_detectable:.1f} SD" if sc.min_detectable is not None else "not reachable"
-        st.markdown(f"- smallest possible p: **{sc.p_floor:.3g}**\n"
-                    f"- chance of a verdict: **{sc.p_complete:.0%}**\n"
-                    f"- smallest effect reliably detected: **{md_txt}**")
-        schedule, refusal = None, None
-        if not sc.allowed:
-            refusal = sc.reason
-        else:
-            try:
-                schedule = E.make_schedule(subj0.start, n_cycles, metric, seed, record_end=rec_end)
-            except E.ScheduleDoesNotFit as err:
-                refusal = str(err)
-        if refusal:
-            st.error(refusal)
-        elif sc.p_complete < 0.8:
-            st.warning(f"This person's data coverage gives the trial a {sc.p_complete:.0%} chance of producing "
-                       f"a verdict at all. Consider more cycles.")
-        if not sc.p_complete_method.startswith("block bootstrap"):
-            st.caption("Chance of a verdict uses the binomial fallback (before period too short to resample); "
-                       "it is optimistic when missing days come in runs.")
-        st.caption("Assumes the device keeps recording as it has been.")
-        if schedule is not None:
-            st.caption("Schedule: " + ", ".join("/".join(c) for c in schedule.cycles) + f" (seed {seed})")
+    n_cycles = int(settings.number_input("On/off cycles (1 week on + 1 week off)", min_value=1, max_value=12,
+                                         value=default_n, step=1, key=f"ncyc_{person}_{start_day}_{metric_key}"))
+    if settings.button("Re-randomise schedule"):
+        st.session_state["sched_seed"] = st.session_state.get("sched_seed", 0) + 1
+    seed = st.session_state.get("sched_seed", 0)
+    sc = schedule_check_cached(root, start_day, person, n_cycles, metric_key)
+    schedule, refusal = None, None
+    if not sc.allowed:
+        refusal = sc.reason
+    else:
+        try:
+            schedule = E.make_schedule(subj0.start, n_cycles, metric, seed, record_end=rec_end)
+        except E.ScheduleDoesNotFit as err:
+            refusal = str(err)
+    if refusal:
+        main.error(refusal)
+    else:
+        md_txt = f"{sc.min_detectable:.1f} SD" if sc.min_detectable is not None else "no size reliably"
+        main.caption(f"{n_cycles} weekly on/off cycles, randomised · detects ≥ {md_txt} · "
+                     f"{sc.p_complete:.0%} chance of a verdict")
     trial = {"n": n_cycles, "check": sc, "schedule": schedule, "refusal": refusal}
 
-sb.markdown("**Demo controls**")
 demo_options = ["None", "Plant harm"] + (["Plant effect"] if trial and trial["schedule"] else [])
 sd_units = float(np.std(E.before_values(by_id[person]).to_numpy(), ddof=1))
 if st.session_state.get("demo") not in demo_options:
     st.session_state["demo"] = "None"
-demo = sb.radio("Planted effect", demo_options, label_visibility="collapsed", key="demo",
-                help=f"Plant harm: a sustained shift in the harm direction on {person}'s real data. "
-                     f"Plant effect: a shift in the works direction during {person}'s on-blocks only. "
-                     f"One at a time: the two directions are opposite and would partly cancel.")
+demo = main.radio("Test it: add a simulated change", demo_options, key="demo", horizontal=True,
+                  help="Adds a labelled shift to this person's real data. Plant effect needs the on/off trial.")
 
 
 def size_slider(label: str, key: str) -> float:
     """A planted size in the metric's own units (0.5–4 SD for this person); returns SDs."""
     step = max(0.1, round(sd_units / 10, 1))
     lo, hi, default = round(0.5 * sd_units, 1), round(4 * sd_units, 1), round(2 * sd_units, 1)
-    v = sb.slider(f"{label} ({metric.unit})", min_value=lo, max_value=hi, value=default, step=step, key=key)
-    sb.caption(f"= {v / sd_units:.1f} SD for {person} (1 SD = {sd_units:.1f} {metric.unit})")
+    v = main.slider(f"{label} ({metric.unit})", min_value=lo, max_value=hi, value=default, step=step, key=key,
+                    help=f"1 SD = {sd_units:.1f} {metric.unit} for {person}")
     return v / sd_units
 
 
 harm_sd, harm_from, effect_sd = 2.0, 5, 2.0
 if demo == "Plant harm":
-    harm_sd = size_slider("Harm size", f"hsize_{person}_{metric_key}")
-    harm_from = int(sb.slider("Harm starts on day", 1, 20, 5, key=f"hfrom_{person}_{metric_key}"))
+    harm_sd = size_slider("Size", f"hsize_{person}_{metric_key}")
+    harm_from = int(main.slider("Starts on day", 1, 20, 5, key=f"hfrom_{person}_{metric_key}"))
 elif demo == "Plant effect":
-    effect_sd = size_slider("Effect size", f"esize_{person}_{metric_key}")
+    effect_sd = size_slider("Size", f"esize_{person}_{metric_key}")
 
 # ---------------------------------------------------------------- assess everyone
 planted_id = person if demo != "None" else None
@@ -442,16 +424,15 @@ def efficacy_section(r):
 def person_page():
     r = results[person]
     subj, ba, base, h = r["subject"], r["ba"], r["base"], r["harm"]
-    st.title(f"{person} · {compound}")
-    st.caption(f"Start {subj.start.date()} (day {start_day}) · coverage {r['coverage']:.0%} · "
-               f"metric: {L.METRICS[metric_key][1].lower()}" + (f" · {SIMULATED}" if subj.simulated else ""))
+    st.title(f"{person} · {L.METRICS[metric_key][1].lower()}")
+    st.caption(f"{compound} started {subj.start.date()}" + (f" · {SIMULATED}" if subj.simulated else ""))
 
     n_after = int((subj.series.index[-1] - subj.start).days)
     today_key = f"today_{person}_{metric_key}_{start_day}"
     st.session_state.setdefault(today_key, n_after)
     if st.session_state[today_key] > n_after:
         st.session_state[today_key] = n_after
-    today = st.slider("Replay · today is day … after the compound started", 0, n_after, key=today_key,
+    today = st.slider("Replay: days since the compound started", 0, n_after, key=today_key,
                       help="Hides the days after 'today'. Nothing is recomputed, so the alarm appears on the "
                            "same day it does in the full run.")
     upto = subj.start + pd.Timedelta(days=today)
@@ -466,23 +447,19 @@ def person_page():
     st.subheader("What changed?")
     c1, c2, c3 = st.columns(3)
     c1.metric(f"Before ({metric.unit})", f"{ba.before_mean:.1f} ± {ba.before_sd:.1f}")
-    c1.caption(f"{ba.before_n} days with data")
     c2.metric(f"After, to day {today} ({metric.unit})",
               f"{ba.after_mean:.1f} ± {ba.after_sd:.1f}" if ba.after_n > 1 else "—")
-    c2.caption(f"{ba.after_n} days with data")
     c3.metric(f"Change ({metric.unit})", f"{ba.change:+.2f}")
-    c3.caption(f"{ba.std_change:+.2f} SD" + (f" · {SIMULATED}" if subj.simulated else ""))
-    st.caption(ba.caveat)
-    show_pop = st.toggle("Show the population 'normal' range", value=True, key="show_pop")
+    c3.caption(f"{ba.std_change:+.2f} SD")
+    show_pop = st.toggle("Show population 'normal' range", value=True, key="show_pop")
     st.pyplot(series_chart(r, upto=upto, show_pop=show_pop))
 
     st.subheader("Is it harming them?")
     sim_tag = f" — {SIMULATED}" if subj.simulated else ""
     if alarm_now:
         day_n = (h.alarm_date - subj.start).days
-        msg = (f"Alarm on {h.alarm_date.date()} (day {day_n}): {metric.name} has moved "
-               f"{direction_word(metric)} this person's normal by more than day-to-day noise explains. "
-               f"Review recommended.")
+        msg = (f"Alarm, day {day_n}: {L.METRICS[metric_key][1].lower()} has moved {direction_word(metric)} "
+               f"{person}'s own normal by more than day-to-day noise explains. Check on them.")
         st.error(msg + sim_tag)
     elif today < h.calendar_len:
         st.success(f"Watching · day {today} of {h.calendar_len}, no alarm" + sim_tag)
@@ -498,29 +475,14 @@ def person_page():
             vb, vr = float(before7.mean()), float(recent.mean())
             word = lambda v: "inside" if pop[0] <= v <= pop[1] else "outside"
             if word(vb) == word(vr):
-                pop_txt = (f"Population range: {word(vb)} it both in the week before ({vb:.1f}) and the last week "
-                           f"({vr:.1f}), so it sees no change.")
+                pop_txt = f"Population range: {word(vb)} before ({vb:.1f}) and now ({vr:.1f}), so no change seen."
             else:
-                pop_txt = (f"Population range: {word(vb)} it the week before ({vb:.1f}), {word(vr)} it the last "
-                           f"week ({vr:.1f}).")
-            own = ("**has alarmed**" if alarm_now else "has not alarmed")
-            st.info(f"{pop_txt} Against {person}'s own normal ({ba.before_mean:.1f} ± {ba.before_sd:.1f} "
-                    f"{metric.unit}), the monitor {own}." + sim_tag)
+                pop_txt = f"Population range: {word(vb)} before ({vb:.1f}), {word(vr)} now ({vr:.1f})."
+            own = "**alarm**" if alarm_now else "no alarm"
+            st.info(f"{pop_txt} Own normal: {own}.")
             st.caption(pop[3])
-    st.caption(f"Monitoring the first {h.calendar_len} days from start: {h.n_valid} of {h.calendar_len} had a "
-               f"scorable residual. Missing days produce no step, so the limit is calibrated on {h.n_valid} steps.")
-    if method == "reference":
-        st.markdown(f"False-alarm rate for this limit: **{mm['fp']:.0%}**, measured on {mm['windows']} real "
-                    f"no-exposure windows ({mm['alarmed']} alarmed).")
-        st.markdown(f"Catches a 2 SD sustained shift {mm['caught']:.0%} of the time within 30 days, typically by day "
-                    f"{mm['median_day']:.0f}. Smaller or slower shifts may not be caught.")
-    else:
-        st.markdown(f"False-alarm rate for this limit (comparator): **{mm['fp']:.0%}**, measured on "
-                    f"{mm['windows']} real no-exposure windows ({mm['alarmed']} alarmed), against a nominal "
-                    f"{E.FP:.0%}.")
-        st.markdown(f"Catches a 2 SD sustained shift {mm['caught']:.0%} of the time within 30 days, typically by "
-                    f"day {mm['median_day']:.0f}. It catches more because its limit is lower, which is the same "
-                    f"fact as its higher false-alarm rate.")
+    st.caption(f"Measured on real people who took nothing: {mm['fp']:.0%} false alarms per 30 days. "
+               f"Catches a 2 SD change {mm['caught']:.0%} of the time, median day {mm['median_day']:.0f}.")
     eff = r.get("eff")
     if eff is not None and eff.verdict == "opposite":
         st.error(f"Efficacy trial: {eff.message} {metric.name} moved {direction_word(metric)} this person's off-week "
@@ -734,18 +696,16 @@ def trace_chart(t, met, label, title):
 
 
 def results_page():
-    st.title("Results: the same engine on two metrics")
+    st.title("Results: same engine, two metrics")
     allr = metric_results()
     keys = [k for k in L.METRICS if k in allr]
     if len(keys) < 2:
         st.error(f"Run `python validate_metrics.py --root {root}` first.")
         return
-    st.caption("Real PMData. For every person, pretend a compound started on day 60, 74, 88 or 102: "
-               "60-day baseline before, 30 days monitored, alarm line built without that person. "
-               "Nothing is planted in the false-alarm test. Detection is measured by planting a sustained "
-               "shift into the same real windows.")
+    st.caption("Real PMData, nobody took anything. Each person is scored against their own 60 days before "
+               "a pretend start, then watched for 30 days.")
 
-    st.subheader("1 · How often it cries wolf, and how often it catches harm")
+    st.subheader("False alarms and detection")
     cols = st.columns(len(keys))
     for c, k in zip(cols, keys):
         r = allr[k]
@@ -762,29 +722,26 @@ def results_page():
                       .replace(" percentage points", " pts"))
             t3.caption(f"for the median person ({'down' if r['harm_direction'] == 'down' else 'up'})")
 
-    st.subheader("2 · Every compound-free month, scored")
-    st.caption("Each dot is one real 30-day window where nobody took anything: the highest the tally got, "
-               "divided by that window's alarm line. Above 1 = a false alarm.")
+    st.subheader("Every compound-free month")
+    st.caption("One dot per real 30-day window. Above the line = a false alarm.")
     cols = st.columns(len(keys))
     for c, k in zip(cols, keys):
         with c:
             st.markdown(f"**{allr[k]['label']}**")
             st.pyplot(strip_chart(allr[k]))
 
-    st.subheader("3 · Where the alarm line comes from matters more than the metric")
-    st.caption("Reference group: the line is set from other people's real compound-free months. Own baseline: "
-               "set only from this person's 60 days, which rarely contain their rare extreme days, so its line "
-               "sits too low. Same 5% target "
-               + "(days beyond 3 SD in the baseline: "
-               + ", ".join(f"{allr[k]['label'].lower()} {allr[k]['tail_3sd']:.1%}" for k in keys)
-               + "; a bell curve would give 0.3%).")
-    cols = st.columns(len(keys))
+    exp3 = st.expander("Why the alarm line is set from other people's data")
+    exp3.markdown("Every day is still scored against **this person's own normal**. Other people's "
+                  "compound-free data only answers one question: how high does the running tally climb by chance? "
+                  "Sixty days of one person rarely contain their rare extreme days, so a line set from them alone "
+                  "sits too low and false-alarms more.")
+    cols = exp3.columns(len(keys))
     for c, k in zip(cols, keys):
         with c:
             st.markdown(f"**{allr[k]['label']}**")
             st.pyplot(fa_chart(allr[k]))
 
-    st.subheader("4 · How big a change it can see")
+    st.subheader("How big a change it can see")
     c1, c2 = st.columns([3, 2])
     with c1:
         st.pyplot(shift_chart(allr, keys))
@@ -795,35 +752,11 @@ def results_page():
             st.markdown(f"**{r['label']}:** 1 SD ≈ {_units(r['median_sd'], r['unit'])}; "
                         f"caught {one['rate']:.0%} of the time. Day-to-day stickiness "
                         f"φ ≈ {r['median_phi']:.2f}.")
-        st.caption("Stickiness changes how fast a shift is caught. When nights are close to independent "
-                   "(φ ≈ 0) a shift shows in full every night. When days are sticky (resting HR, φ ≈ 0.8), "
-                   "yesterday's raised value already predicts part of today's, so each day adds less new "
-                   "evidence and the same shift in SDs takes longer to catch.")
+        st.caption("Resting HR is sticky day to day, so each day adds less new evidence and the same "
+                   "shift takes longer to catch.")
 
-    st.subheader("5 · One planted harm, step by step")
-    ex_pid = st.selectbox("Example person", [w["subject"] for w in allr[keys[0]]["windows"] if w["offset"] == 60],
-                          key="res_pid")
-    cols = st.columns(len(keys))
-    for c, k in zip(cols, keys):
-        r = allr[k]
-        wins = [w for w in r["windows"] if w["subject"] == ex_pid and w["offset"] == 60]
-        with c:
-            if not wins:
-                st.info(f"{ex_pid} has no day-60 window for {r['label'].lower()}.")
-                continue
-            t = window_trace(root, k, ex_pid, wins[0]["start"], plant_sd=2.0)
-            met = L.METRICS[k][0]
-            when = (f"alarm on day {(t['alarm'] - t['start']).days}" if t["alarm"] is not None
-                    else "no alarm within 30 days")
-            st.pyplot(trace_chart(t, met, r["label"],
-                                  f"{ex_pid} · planted {_units(2 * t['sd'], met.unit).replace(' percentage points', ' pts')} "
-                                  f"{'drop' if met.harm_direction == 'down' else 'rise'} from day 5 · {when}"))
-            st.caption(f"{SIMULATED}: the shift is added to {ex_pid}'s real data; noise and gaps are real.")
-
-    st.subheader("6 · Alarms nobody planted")
-    st.caption("These are the false alarms from section 2: no compound was taken. Some are sustained real "
-               "changes; some are one extreme day (a CUSUM can be tipped over by a single large value). Either "
-               "way the response is the same: a medic's check-in.")
+    st.subheader("Alarms nobody planted")
+    st.caption("No compound was taken. Some are real sustained changes, some are one extreme day.")
     cols = st.columns(len(keys))
     for c, k in zip(cols, keys):
         r = allr[k]
