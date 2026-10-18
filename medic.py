@@ -132,7 +132,7 @@ def act(pid: str, key: str, action: str) -> None:
 
 
 with st.sidebar:
-    view = st.radio("View", ["Unit monitor", "Real substance: alcohol"], key="view")
+    view = st.radio("View", ["Unit monitor", "On/off trial", "Real substance: alcohol"], key="view")
     st.markdown("**Compound setup**")
     compound_name = st.text_input("Compound", "Compound A")
     st.markdown("Signals to watch")
@@ -199,8 +199,6 @@ def alcohol_page():
     st.caption("Real data only: PMData participants' own daily reports of whether they drank, and their Fitbit "
                "data. Nothing simulated.")
     st.title("Real substance: alcohol")
-    st.write("The same per-person scoring, pointed at a substance people actually took. For each person: how far "
-             "from their own normal they were after a drinking day, compared with other days.")
     df, series = alcohol_effects(root)
     cols = st.columns(2)
     for c, key in zip(cols, ALL_KEYS):
@@ -262,6 +260,129 @@ def alcohol_page():
                "are left out; p01 never reported drinking; p15 has no reports.")
 
 
+# ---------------------------------------------------------------- on/off trial for one person
+@st.cache_data(show_spinner="Checking who has enough record for a trial…")
+def trial_candidates(root: str, key: str):
+    out = []
+    for pid in L.list_pmdata(root):
+        try:
+            subj = L.load_pmdata(root, pid, START_DAY, key)
+        except (L.SubjectUnusable, ValueError):
+            continue
+        n = E.max_cycles(subj.start, subj.series.last_valid_index())
+        if n >= E.MIN_CYCLES:
+            out.append((pid, n))
+    return out
+
+
+def trial_page():
+    st.title("Is it working for this person?")
+    c1, c2, _ = st.columns([1.2, 1, 2])
+    key = c1.selectbox("Signal", ["sleep_efficiency", "resting_hr"], format_func=lambda k: L.METRICS[k][1],
+                       key="trial_key")
+    cands = trial_candidates(root, key)
+    if not cands:
+        st.error("No one has a long enough record for a 6-cycle trial on this signal.")
+        return
+    ids = [c[0] for c in cands]
+    pid = c2.selectbox("Person", ids, index=ids.index("p01") if "p01" in ids else 0, key="trial_pid")
+    n_cycles = E.MIN_CYCLES
+    met = L.METRICS[key][0]
+    subj = L.load_pmdata(root, pid, START_DAY, key)
+    base = E.fit_baseline(subj)
+    seed = 0
+    sim = st.toggle("Simulated effect: compound works (2 SD better in ON weeks)", value=True, key="trial_sim")
+    sched = E.make_schedule(subj.start, n_cycles, met, seed, record_end=subj.series.last_valid_index())
+    scored = E.plant_effect(subj, sched, met, delta_sd=2.0) if sim else subj
+    blocks = E.schedule_blocks(sched)
+    end = blocks[-1][2] + pd.Timedelta(days=sched.block_days - 1)
+    total_days = (end - subj.start).days + 1
+
+    if key == "resting_hr":
+        st.warning("Resting heart rate needs a large effect (about 3 SD) to show in a 6-cycle trial.")
+
+    tday = st.slider("Trial day", 0, total_days, value=0, key=f"tday_{pid}_{key}_{n_cycles}_{seed}",
+                     help=f"Random order, seed {seed} (recorded so it can be audited). "
+                          f"{n_cycles} cycles; 6 is the minimum that can ever reach p < 0.05.")
+    today = subj.start + pd.Timedelta(days=tday)
+    rows = []
+    for i, (cyc, arm, first, usable_from) in enumerate(blocks):
+        last = first + pd.Timedelta(days=sched.block_days - 1)
+        state = "done" if last < today else ("this week" if first <= today <= last else "")
+        rows.append({"Week": i + 1, "Dates": f"{first:%b %d} – {last:%b %d}",
+                     "Compound": "ON" if arm == "on" else "OFF", "Status": state, "_cycle": cyc})
+    dt = pd.DataFrame(rows)
+
+    def shade(row):
+        if row["Status"] == "this week":
+            return ["background-color: rgba(42,120,214,0.22); font-weight: 600"] * len(row)
+        if row["Compound"] == "ON":
+            return ["background-color: rgba(42,120,214,0.08)"] * len(row)
+        return [""] * len(row)
+
+    done_cycles = sum(1 for c in range(1, n_cycles + 1)
+                      if all(r["Status"] == "done" for r in rows if r["_cycle"] == c))
+    t1, t2 = st.columns([2, 3])
+    with t1:
+        st.markdown("**Dosing schedule**")
+        st.dataframe(dt.drop(columns="_cycle").style.apply(lambda r: shade(r), axis=1), hide_index=True,
+                     width="stretch", height=min(460, 38 + 35 * len(dt)))
+        st.download_button("Download schedule", dt.drop(columns=["Status", "_cycle"]).to_csv(index=False).encode(),
+                           file_name=f"{pid}_{key}_dosing_schedule.csv", mime="text/csv")
+    with t2:
+        this = dt[dt["Status"] == "this week"]
+        m1, m2 = st.columns(2)
+        m1.metric("This week", "—" if not len(this) else this["Compound"].iloc[0])
+        m2.metric("Cycles done", f"{done_cycles} / {n_cycles}")
+
+    # chart up to today
+    x = scored.series[(scored.series.index >= subj.start - pd.Timedelta(days=21)) & (scored.series.index <= today)]
+    fig, ax = plt.subplots(figsize=(7.5, 3.0))
+    dd = pd.Timedelta(days=1)
+    first_on = True
+    for cyc, arm, first, usable_from in blocks:
+        if arm == "on":
+            ax.axvspan(first - dd / 2, first + pd.Timedelta(days=sched.block_days) - dd / 2, color=C_BAND, alpha=0.10,
+                       lw=0, label="ON week" if first_on else None)
+            first_on = False
+        ax.axvspan(first - dd / 2, usable_from - dd / 2, facecolor="none", edgecolor=C_MUTED, hatch="////", lw=0)
+    ax.plot(x.index, x.to_numpy(), lw=1.2, color=C_INK, marker="o", ms=2)
+    ax.axvline(subj.start, color=C_INK, ls="--", lw=1)
+    ax.axvline(today, color=C_BAND, lw=1, alpha=0.7)
+    ax.set_xlim(subj.start - pd.Timedelta(days=22), end + pd.Timedelta(days=1))
+    ax.set_ylabel(met.unit, fontsize=8)
+    ax.set_title(f"{pid} · {L.METRICS[key][1]}" + (" · simulated effect" if sim else ""), loc="left", fontsize=9,
+                 color=C_INK)
+    for side in ("top", "right"):
+        ax.spines[side].set_visible(False)
+    ax.tick_params(labelsize=8, colors=C_INK)
+    ax.legend(loc="upper left", fontsize=7, frameon=False)
+    fig.tight_layout()
+    with t2:
+        st.pyplot(fig)
+    plt.close(fig)
+
+    if done_cycles < n_cycles:
+        with t2:
+            st.info(f"Verdict after cycle {n_cycles}.")
+        return
+    eff = E.efficacy(scored, sched, met)
+    tag = " (simulated effect)" if sim else ""
+    with t2:
+        if eff.verdict == "working":
+            st.success(f"Working for {pid}: better in ON weeks in {eff.n_agree} of {eff.n_usable} cycles, "
+                       f"p = {eff.p:.3f}.{tag}")
+        elif eff.verdict == "opposite":
+            st.error(f"Worse in ON weeks for {pid}: {eff.n_agree} of {eff.n_usable} cycles, p = {eff.p:.3f}.{tag}")
+        elif eff.verdict == "none":
+            st.info(f"No consistent ON/OFF difference for {pid} (p = {eff.p:.2f}). Not proof of no effect.{tag}")
+        else:
+            st.warning(eff.message + tag)
+
+
+if view == "On/off trial":
+    trial_page()
+    st.stop()
 if view == "Real substance: alcohol":
     alcohol_page()
     st.stop()
