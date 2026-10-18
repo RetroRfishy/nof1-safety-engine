@@ -12,6 +12,7 @@ import streamlit as st
 from scipy.stats import binom
 
 import engine as E
+import direction as D
 import loaders as L
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -131,10 +132,10 @@ def cohort(root: str, start_day: int, metric_key: str = "resting_hr"):
     return subjects, skipped, E.reference_library(subjects)
 
 
-def assess(subj, lib, metric, method):
+def assess(subj, lib, metric, method, direction):
     base = E.fit_baseline(subj)
-    return {"subject": subj, "base": base, "ba": E.before_after(subj),
-            "harm": E.harm_monitor(subj, base, lib, metric, method=method, seed=0),
+    harm, side = D.monitor(subj, base, lib, metric, direction, method=method)
+    return {"subject": subj, "base": base, "ba": E.before_after(subj), "harm": harm, "side": side,
             "coverage": float(subj.series.notna().mean()),
             "day": int((subj.series.index[-1] - subj.start).days) + 1}
 
@@ -198,6 +199,11 @@ ids = list(by_id)
 if st.session_state.get("person") not in ids:
     st.session_state["person"] = "p01" if "p01" in ids else ids[0]
 person = main.selectbox("Person", ids, key="person")
+direction = main.radio("Alert when it", list(D.DIRECTIONS),
+                       index=list(D.DIRECTIONS).index(metric.harm_direction), format_func=D.LABEL.get,
+                       horizontal=True, key=f"dir_{metric_key}",
+                       help="Rises / Falls: watch one direction (faster, for a known risk). Either way: watch "
+                            "both, for a compound whose effects are unknown.")
 
 M_ = measured(metric_key)
 if M_ is None:
@@ -208,6 +214,10 @@ method = settings.radio(
     format_func=lambda m: f"{METHOD_LABELS[m]} · {M_[m]['fp']:.0%} alerts with nothing given",
     help="Either way, every day is scored against this person's own normal. This only sets how high the "
          "running tally must climb before it alarms.")
+
+if direction == "either" and method == "own_baseline":
+    method = "reference"
+    settings.caption("'Either way' uses the other-people line; the own-baseline line is one-sided only.")
 
 trial_on = main.toggle("On/off trial: is it working?", key="trial_on")
 trial = None
@@ -268,10 +278,11 @@ results = {}
 for subj in subjects:
     s = subj
     if subj.subject_id == planted_id and demo == "Plant harm":
-        s = E.plant_harm(subj, metric, delta_sd=harm_sd, start_offset=harm_from)
+        s = E.plant_harm(subj, D.with_direction(metric, metric.harm_direction if direction == "either" else direction),
+                         delta_sd=harm_sd, start_offset=harm_from)
     elif subj.subject_id == planted_id and demo == "Plant effect":
         s = E.plant_effect(subj, trial["schedule"], metric, delta_sd=effect_sd)
-    results[subj.subject_id] = assess(s, lib, metric, method)
+    results[subj.subject_id] = assess(s, lib, metric, method, direction)
 if trial and trial["schedule"] is not None:
     results[person]["eff"] = E.efficacy(results[person]["subject"], trial["schedule"], metric)
 for r in results.values():
@@ -279,6 +290,13 @@ for r in results.values():
         log_alarm({**r["harm"].record, "method": method})
 
 mm = M_[method]
+if direction != metric.harm_direction:
+    _dm = D.measured(metric_key)
+    if _dm:
+        _md = _dm["median_day"].get(direction)
+        mm = {"fp": _dm["alert_rate"][direction], "caught": _dm["catch_2sd"][direction],
+              "median_day": float("nan") if _md is None else _md,
+              "alarmed": int(round(_dm["alert_rate"][direction] * _dm["n"])), "windows": _dm["n"]}
 
 
 # ---------------------------------------------------------------- roster
@@ -478,7 +496,8 @@ def person_page():
     sim_tag = f" — {SIMULATED}" if subj.simulated else ""
     if alarm_now:
         day_n = (h.alarm_date - subj.start).days
-        msg = (f"Alarm, day {day_n}: {L.METRICS[metric_key][1].lower()} has moved {direction_word(metric)} "
+        msg = (f"Alarm, day {day_n}: {L.METRICS[metric_key][1].lower()} has moved "
+               f"{'above' if r['side'] == 'up' else 'below'} "
                f"{person}'s own normal by more than day-to-day noise explains. Check on them.")
         st.error(msg + sim_tag)
     elif today < h.calendar_len:
@@ -777,6 +796,25 @@ def results_page():
                         f"φ ≈ {r['median_phi']:.2f}.")
         st.caption("Resting HR is sticky day to day, so each day adds less new evidence and the same "
                    "shift takes longer to catch.")
+
+    st.subheader("Which direction to watch")
+    st.caption("Watching one direction is faster for a known risk; 'either way' also catches the other "
+               "direction, at a cost. Measured on the same real windows (python twosided.py).")
+    cols = st.columns(len(keys))
+    for c, k in zip(cols, keys):
+        dm = D.measured(k)
+        with c:
+            st.markdown(f"**{allr[k]['label']}**")
+            if not dm:
+                st.info("Run python twosided.py")
+                continue
+            tbl = pd.DataFrame({
+                "Alert when it": [D.LABEL[d] for d in D.DIRECTIONS],
+                "Alerts, nothing given": [f"{dm['alert_rate'][d]:.1%}" for d in D.DIRECTIONS],
+                "2 SD shift caught": [f"{dm['catch_2sd'][d]:.0%}" for d in D.DIRECTIONS],
+                "Median day": ["—" if dm["median_day"][d] is None else f"{dm['median_day'][d]:.0f}"
+                               for d in D.DIRECTIONS]})
+            st.dataframe(tbl, hide_index=True, width="stretch")
 
     st.subheader("Alarms nobody planted")
     st.caption("No compound was taken. Some are real sustained changes, some are one extreme day.")

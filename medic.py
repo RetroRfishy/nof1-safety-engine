@@ -16,6 +16,7 @@ import streamlit as st
 from scipy.stats import binom, wilcoxon
 
 import engine as E
+import direction as D
 import loaders as L
 from subject import Subject
 
@@ -26,8 +27,7 @@ BASELINE_DAYS = 60
 COURSE = E.HORIZON                      # 30-day monitoring course
 ALL_KEYS = ("resting_hr", "sleep_efficiency")
 # Signals available from the wearable; each alarms in its harm direction.
-SIGNAL_LABELS = {"resting_hr": "Resting heart rate (alert if it rises)",
-                 "sleep_efficiency": "Sleep efficiency (alert if it falls)"}
+SIGNAL_LABELS = {"resting_hr": "Resting heart rate", "sleep_efficiency": "Sleep efficiency"}
 # Simulated reactions: sustained drop in sleep efficiency from day 2, in that person's own SDs.
 REACTIONS = {"p01": 2.5, "p06": 2.0, "p15": 1.5}
 REACTION_START = 2
@@ -39,7 +39,15 @@ st.set_page_config(page_title="Medic view", layout="wide")
 
 
 # ---------------------------------------------------------------- data + engine
-def false_alarm_rates() -> dict:
+def false_alarm_rates(dirs: dict) -> dict:
+    """Measured alerts-with-nothing-given rate for each signal under its chosen direction."""
+    out = {}
+    for k in ALL_KEYS:
+        m = D.measured(k)
+        if m and dirs.get(k) in m.get("alert_rate", {}):
+            out[k] = m["alert_rate"][dirs[k]]
+    if len(out) == len(ALL_KEYS):
+        return out
     try:
         with open(os.path.join(HERE, "metric_results.json")) as f:
             r = json.load(f)
@@ -53,7 +61,7 @@ def plant_reaction(subj: Subject, metric, delta_sd: float) -> Subject:
 
 
 @st.cache_resource(show_spinner="Loading the unit…")
-def build_unit(root: str, reactions_on: bool):
+def build_unit(root: str, reactions_on: bool, dirs: tuple):
     libs, metric_subjects = {}, {}
     for key in ALL_KEYS:
         subs = []
@@ -82,9 +90,10 @@ def build_unit(root: str, reactions_on: bool):
                 continue
             simulated = reactions_on and key == "sleep_efficiency" and pid in REACTIONS
             scored = plant_reaction(subj, met, REACTIONS[pid]) if simulated else subj
-            r = E.harm_monitor(scored, base, libs[key], met, method="reference")
+            r, side = D.monitor(scored, base, libs[key], met, dict(dirs)[key])
             person["metrics"][key] = {"series": scored.series, "S": r.S, "h": r.h, "alarm": r.alarm_date,
-                                      "mu": base.mu, "sd": base.sd_x, "simulated": simulated}
+                                      "mu": base.mu, "sd": base.sd_x, "simulated": simulated,
+                                      "side": side, "direction": dict(dirs)[key]}
         unit[pid] = person
     return unit
 
@@ -127,8 +136,19 @@ with st.sidebar:
     st.markdown("**Compound setup**")
     compound_name = st.text_input("Compound", "Compound A")
     st.markdown("Signals to watch")
-    watched = [k for k in ALL_KEYS if st.checkbox(SIGNAL_LABELS[k], value=True, key=f"watch_{k}")]
-    st.caption("Each signal is scored against the person's own normal, separately.")
+    watched, dirs = [], []
+    for k in ALL_KEYS:
+        default = L.METRICS[k][0].harm_direction
+        on = st.checkbox(SIGNAL_LABELS[k], value=True, key=f"watch_{k}")
+        d = st.radio(f"Alert when {SIGNAL_LABELS[k].lower()}", list(D.DIRECTIONS),
+                     index=list(D.DIRECTIONS).index(default), format_func=D.LABEL.get, horizontal=True,
+                     key=f"dir_{k}", disabled=not on, label_visibility="collapsed")
+        dirs.append((k, d))
+        if on:
+            watched.append(k)
+    dirs = tuple(dirs)
+    st.caption("Each signal is scored against the person's own normal, separately. 'Either way' watches both "
+               "directions, for a compound whose effects are unknown.")
     reactions_on = st.toggle("Simulate a sleep reaction in 3 people", value=True,
                              help="Sleep efficiency drops in p01, p06 and p15 from day 2 (2.5, 2.0 and 1.5 "
                                   "of their own SDs). Everyone else is their real, unchanged data.")
@@ -249,8 +269,8 @@ if not METRIC_KEYS:
     st.info("Choose at least one signal to watch in the sidebar.")
     st.stop()
 
-unit = build_unit(root, reactions_on)
-fp = false_alarm_rates()
+unit = build_unit(root, reactions_on, dirs)
+fp = false_alarm_rates(dict(dirs))
 day = st.session_state["day"]
 labels = {k: L.METRICS[k][1] for k in METRIC_KEYS}
 
@@ -284,7 +304,7 @@ for pid, key, aday in sorted(open_alerts, key=lambda a: a[2]):
     met = L.METRICS[key][0]
     today = m["S"].index[0] + pd.Timedelta(days=day)
     recent = m["series"][(m["series"].index <= today) & (m["series"].index > today - pd.Timedelta(days=7))].dropna()
-    word = "above" if met.harm_direction == "up" else "below"
+    word = "above" if m["side"] == "up" else "below"
     with st.container(border=True):
         c1, c2 = st.columns([3, 2])
         with c1:

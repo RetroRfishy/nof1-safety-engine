@@ -11,3 +11,5 @@ replay_*.json
 data/
 *.zip
 replay_*.json
+medic_styled.py
+_style_build.py
