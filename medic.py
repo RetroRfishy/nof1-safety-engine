@@ -21,7 +21,7 @@ from subject import Subject
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_ROOT = os.path.expanduser("~/Downloads/pmdata")
-START_DAY = 74          # mid-January for most people; see the note in 'How alerts are decided'
+START_DAY = 60
 BASELINE_DAYS = 60
 COURSE = E.HORIZON                      # 30-day monitoring course
 ALL_KEYS = ("resting_hr", "sleep_efficiency")
@@ -195,7 +195,8 @@ def alcohol_page():
                 continue
             p = float(wilcoxon(d).pvalue)
             st.metric(f"{word} after drinking", f"{int(harm.sum())} of {len(d)} people")
-            st.caption(f"Median difference {np.median(d):+.2f} of their own SDs · Wilcoxon p = {p:.3f}")
+            st.caption(f"Median difference {np.median(d):+.2f} of their own SDs · Wilcoxon p = {p:.3f}"
+                       + ("" if p < 0.05 else " · no consistent effect"))
             fig, ax = plt.subplots(figsize=(6.2, 1.9))
             dd = d.sort_values()
             ax.axvline(0, color=C_MUTED, lw=1)
@@ -303,7 +304,7 @@ p_each = np.mean([fp[k] for _, k in pairs]) * frac
 expected = len(pairs) * p_each
 k_alerts = len(alerts)
 tail = float(binom.sf(k_alerts - 1, len(pairs), p_each)) if k_alerts else 1.0
-line = (f"**{k_alerts} alert{'s' if k_alerts != 1 else ''} so far.** With nothing wrong you'd expect about "
+line = (f"**{k_alerts} alert{'s' if k_alerts != 1 else ''} so far.** With nothing given you'd expect about "
         f"{expected:.1f} by day {day} across {len(unit)} people and {len(METRIC_KEYS)} "
         f"signal{'s' if len(METRIC_KEYS) != 1 else ''}.")
 if k_alerts and tail < 0.05:
@@ -385,10 +386,7 @@ with st.expander("How alerts are decided"):
         "wobble. Nobody is compared with a population range.\n"
         "- **A running tally.** Each day adds how far they are from what their own yesterday predicts; normal "
         "noise drains it back to zero, a sustained change builds it up.\n"
-        f"- **The alarm line.** Set so that on real people who took nothing it false-alarms "
-        f"{fp['resting_hr']:.0%} (resting HR) and {fp['sleep_efficiency']:.1%} (sleep efficiency) of 30-day "
-        "courses. The evidence is in `app.py`, Results page.\n"
-        "- **Why the unit starts mid-January.** Starting on day 60 (around New Year for most people) gives 5 "
-        "real alerts in this unit with no compound at all, more than chance. That is a change the whole group "
-        "shared (holidays ending), and the unit line flags it, which is the right behaviour, but it would hide "
-        "the simulated reactions. Starting two weeks later gives 2 real alerts, about what chance predicts.")
+        f"- **The alarm line.** Set so that on real people who took nothing, {fp['resting_hr']:.0%} (resting HR) "
+        f"and {fp['sleep_efficiency']:.1%} (sleep efficiency) of 30-day courses produce an alert. Those are "
+        "alerts with nothing given, not necessarily errors: illness, alcohol or training move these signals "
+        "too. The evidence is in `app.py`, Results page.")

@@ -55,7 +55,7 @@ Unzip it so the participant folders sit at `~/Downloads/pmdata/p01 … p16`, or 
 
 Licence: CC BY-NC 4.0 (attribution, non-commercial; free for research and teaching). Citation: Thambawita V., Hicks S. A., Borgli H., et al. *PMData: A Sports Logging Dataset.* 11th ACM Multimedia Systems Conference (MMSys '20), 2020. https://doi.org/10.1145/3339825.3394926
 
-Resting HR: missing days (stored as value 0.0) become NaN. Sleep efficiency: main-sleep records of type "stages" only, longest record per night; nights with no record are NaN. Every series is reindexed to complete days, and nothing is interpolated.
+Resting HR: missing days (stored as value 0.0) become NaN. Sleep efficiency: computed as 100 × minutes asleep ÷ time in bed (the standard definition, so the ≥85% "good sleep" threshold applies); Fitbit's own efficiency field is not used because its formula is unpublished. Main-sleep records of type "stages" only, longest record per night; nights with no record are NaN. Every series is reindexed to complete days, and nothing is interpolated.
 
 | | |
 |---|---|

@@ -101,13 +101,13 @@ def measured(metric_key: str = "resting_hr") -> dict:
 
 
 def cluster_line(n_alarm: int, n_people: int, rate: float) -> str:
-    """Roster summary: alarms seen, alarms expected with nothing wrong, and the
+    """Roster summary: alarms seen, alarms expected with nothing given, and the
     binomial chance of seeing that many or more."""
     expected = n_people * rate
     exp_words = "less than 1" if expected < 0.5 else f"about {expected:.0f}"
     head = f"**{n_alarm} alarm{'s' if n_alarm != 1 else ''} out of {n_people} people.**"
     if n_alarm == 0:
-        return f"{head} With nothing wrong you'd expect {exp_words}."
+        return f"{head} With nothing given you'd expect {exp_words}."
     tail = float(binom.sf(n_alarm - 1, n_people, rate))
     if tail >= 0.5:
         often = "more often than not"
@@ -115,7 +115,7 @@ def cluster_line(n_alarm: int, n_people: int, rate: float) -> str:
         often = f"about 1 time in {max(2, round(1 / tail))}"
     close = ("This is not more than chance." if tail >= CLUSTER_ALPHA else
              "That is more than chance would usually produce; review these alarms together.")
-    return (f"{head} With nothing wrong you'd expect {exp_words}, and {n_alarm} or more happens "
+    return (f"{head} With nothing given you'd expect {exp_words}, and {n_alarm} or more happens "
             f"{often}. {close}")
 
 
@@ -205,7 +205,7 @@ if M_ is None:
     st.stop()
 method = settings.radio(
     "Alarm line set from", list(METHOD_LABELS),
-    format_func=lambda m: f"{METHOD_LABELS[m]} · {M_[m]['fp']:.0%} false alarms",
+    format_func=lambda m: f"{METHOD_LABELS[m]} · {M_[m]['fp']:.0%} alerts with nothing given",
     help="Either way, every day is scored against this person's own normal. This only sets how high the "
          "running tally must climb before it alarms.")
 
@@ -309,7 +309,7 @@ def roster_page():
     real = [r for r in results.values() if not r["subject"].simulated]
     n_alarm = sum(r["harm"].alarm_date is not None for r in real)
     st.markdown(cluster_line(n_alarm, len(real), max(mm["fp"], E.FP)))
-    st.caption(f"Expected count uses the measured false-alarm rate for this limit ({mm['fp']:.0%}, "
+    st.caption(f"Expected count uses the measured rate of alerts with nothing given for this limit ({mm['fp']:.0%}, "
                f"{mm['alarmed']} of {mm['windows']} real no-exposure windows) and the binomial distribution.")
     if planted_id:
         st.caption(f"{planted_id} carries a planted harm ({SIMULATED.lower()}) and is not counted above.")
@@ -481,7 +481,8 @@ def person_page():
             own = "**alarm**" if alarm_now else "no alarm"
             st.info(f"{pop_txt} Own normal: {own}.")
             st.caption(pop[3])
-    st.caption(f"Measured on real people who took nothing: {mm['fp']:.0%} false alarms per 30 days. "
+    st.caption(f"Alerts with nothing given: {mm['fp']:.0%} of 30-day courses, measured on real people "
+               f"(some are real changes such as illness or alcohol). "
                f"Catches a 2 SD change {mm['caught']:.0%} of the time, median day {mm['median_day']:.0f}.")
     eff = r.get("eff")
     if eff is not None and eff.verdict == "opposite":
@@ -535,7 +536,7 @@ def person_page():
         st.markdown(
             f"**How firm the reference limit is.** The library has 13 people. Leaving any one of them out moves "
             f"h by {stab['h_spread'][0]:.0%}–{stab['h_spread'][1]:.0%} of its value (median "
-            f"{stab['h_spread'][2]:.0%}). The false-alarm rate moves less: it stays at {stab['fp_range'][0]:.0%} "
+            f"{stab['h_spread'][2]:.0%}). The rate of alerts with nothing given moves less: it stays at {stab['fp_range'][0]:.0%} "
             f"for every left-out person but one, and rises to {stab['fp_range'][1]:.0%} without "
             f"{stab['fp_jump_without']}, whose drift sets most of the tail. A deployment needs a reference "
             f"cohort of 50–100 people for a firm limit.")
@@ -640,7 +641,7 @@ def fa_chart(r):
     ax.set_yticks(y, ["Reference group\n(default)", "Own baseline\n(comparator)"], fontsize=8)
     ax.invert_yaxis()
     ax.set_xlim(0, 55)
-    ax.set_xlabel("false alarms per 30-day course, % (95% interval)", fontsize=8)
+    ax.set_xlabel("alerts with nothing given per 30-day course, % (95% interval)", fontsize=8)
     _style(ax)
     ax.grid(axis="y", visible=False)
     ax.grid(axis="x", color="#ecebe7", lw=0.8)
@@ -705,7 +706,9 @@ def results_page():
     st.caption("Real PMData, nobody took anything. Each person is scored against their own 60 days before "
                "a pretend start, then watched for 30 days.")
 
-    st.subheader("False alarms and detection")
+    st.subheader("Alerts with nothing given, and detection")
+    st.caption("An alert with nothing given is not necessarily an error: real life (illness, alcohol, "
+               "training) moves these signals too. It is the number of check-ins to expect.")
     cols = st.columns(len(keys))
     for c, k in zip(cols, keys):
         r = allr[k]
@@ -713,7 +716,7 @@ def results_page():
         with c:
             st.markdown(f"#### {r['label']}")
             t1, t2, t3 = st.columns(3)
-            t1.metric("False alarms", f"{fa['rate']:.1%}")
+            t1.metric("Alerts, nothing given", f"{fa['rate']:.1%}")
             t1.caption(f"{fa['alarmed']} of {fa['windows']} windows · {r['n_subjects']} people · "
                        f"95% {fa['ci'][0]:.0%}–{fa['ci'][1]:.0%}")
             t2.metric("2 SD harm caught", f"{de['rate']:.0%}")
@@ -723,7 +726,7 @@ def results_page():
             t3.caption(f"for the median person ({'down' if r['harm_direction'] == 'down' else 'up'})")
 
     st.subheader("Every compound-free month")
-    st.caption("One dot per real 30-day window. Above the line = a false alarm.")
+    st.caption("One dot per real 30-day window. Above the line = an alert with nothing given.")
     cols = st.columns(len(keys))
     for c, k in zip(cols, keys):
         with c:
@@ -734,7 +737,7 @@ def results_page():
     exp3.markdown("Every day is still scored against **this person's own normal**. Other people's "
                   "compound-free data only answers one question: how high does the running tally climb by chance? "
                   "Sixty days of one person rarely contain their rare extreme days, so a line set from them alone "
-                  "sits too low and false-alarms more.")
+                  "sits too low and alerts more often.")
     cols = exp3.columns(len(keys))
     for c, k in zip(cols, keys):
         with c:

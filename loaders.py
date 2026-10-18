@@ -74,10 +74,12 @@ def read_sleep(root: str, pid: str) -> pd.Series:
 
 
 def read_efficiency(root: str, pid: str) -> pd.Series:
-    """Sleep efficiency (%) per night from fitbit/sleep.json: main-sleep records of
-    type "stages" only (Fitbit computes efficiency differently for "classic"
-    records, so the two are not mixed). If a date has more than one, the longest
-    record is used. A night with no such record is NaN. No interpolation."""
+    """Sleep efficiency (%) per night, standard definition: 100 * minutesAsleep / timeInBed,
+    computed here from fitbit/sleep.json. Fitbit's own "efficiency" field is not used: its
+    formula is unpublished and it does not equal asleep / in bed (p01, 2019-11-02: 378 / 430
+    = 88%, field says 97). Main-sleep records of type "stages" only (classic records stage
+    sleep differently). If a date has more than one, the longest record is used. A night
+    with no such record is NaN. No interpolation."""
     path = os.path.join(root, pid, SLEEP_PATH)
     if not os.path.exists(path):
         raise SubjectUnusable(f"{pid}: no {SLEEP_PATH}")
@@ -89,7 +91,8 @@ def read_efficiency(root: str, pid: str) -> pd.Series:
             continue
         d = e["dateOfSleep"]
         if d not in best or e["timeInBed"] > best[d][0]:
-            best[d] = (float(e["timeInBed"]), float(e["efficiency"]))
+            if e["timeInBed"] > 0:
+                best[d] = (float(e["timeInBed"]), 100.0 * float(e["minutesAsleep"]) / float(e["timeInBed"]))
     if not best:
         raise SubjectUnusable(f"{pid}: no main-sleep stages records in {SLEEP_PATH}")
     s = pd.Series({d: v[1] for d, v in best.items()})
