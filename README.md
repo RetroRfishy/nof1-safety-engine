@@ -46,7 +46,16 @@ Alarms are appended to `alarms.jsonl` as one JSON line each: subject, date, metr
 
 ## Data
 
-PMData: Thambawita et al., Simula. Licence CC BY 4.0, at osf.io/vx4bk. Only `pXX/fitbit/resting_heart_rate.json` is read. Missing days (stored as value 0.0) become NaN, the series is reindexed to complete days, and nothing is interpolated.
+**PMData** (16 people, about 5 months of Fitbit, PMSys and Google Forms logs). The data is not in this repo; download it from either:
+
+- Simula datasets: https://datasets.simula.no/pmdata/
+- Open Science Framework: https://osf.io/vx4bk/
+
+Unzip it so the participant folders sit at `~/Downloads/pmdata/p01 … p16`, or set the PMData root in the sidebar. The app only reads `pXX/fitbit/resting_heart_rate.json` and `pXX/fitbit/sleep.json` (about 8 MB of the 3.1 GB).
+
+Licence: CC BY-NC 4.0 (attribution, non-commercial; free for research and teaching). Citation: Thambawita V., Hicks S. A., Borgli H., et al. *PMData: A Sports Logging Dataset.* 11th ACM Multimedia Systems Conference (MMSys '20), 2020. https://doi.org/10.1145/3339825.3394926
+
+Resting HR: missing days (stored as value 0.0) become NaN. Sleep efficiency: main-sleep records of type "stages" only, longest record per night; nights with no record are NaN. Every series is reindexed to complete days, and nothing is interpolated.
 
 | | |
 |---|---|
