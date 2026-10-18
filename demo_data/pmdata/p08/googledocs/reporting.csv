@@ -1,0 +1,59 @@
+date,timestamp,meals,weight,glasses_of_fluid,alcohol_consumed
+11/11/2019,12/11/2019 09:21:23,"Breakfast, Lunch, Dinner, Evening",86,13,No
+15/11/2019,16/11/2019 11:01:40,"Breakfast, Lunch, Dinner, Evening",86,12,Yes
+16/11/2019,16/11/2019 21:16:22,"Breakfast, Lunch, Dinner, Evening",86,13,No
+17/11/2019,17/11/2019 22:55:19,"Breakfast, Lunch, Dinner, Evening",85,10,No
+18/11/2019,19/11/2019 16:06:42,"Breakfast, Lunch, Dinner, Evening",85,10,No
+21/11/2019,21/11/2019 22:45:43,"Breakfast, Lunch, Dinner, Evening",87,10,No
+22/11/2019,24/11/2019 10:49:43,"Breakfast, Lunch, Dinner, Evening",87,12,Yes
+23/11/2019,24/11/2019 10:50:21,"Breakfast, Lunch, Dinner, Evening",87,14,Yes
+25/11/2019,25/11/2019 21:02:03,"Breakfast, Lunch, Dinner, Evening",87,13,No
+26/11/2019,27/11/2019 08:45:10,"Breakfast, Lunch, Dinner, Evening",87,14,No
+29/11/2019,30/11/2019 11:50:07,"Breakfast, Lunch, Dinner, Evening",87,20,Yes
+02/12/2019,03/12/2019 22:05:25,"Breakfast, Lunch, Dinner, Evening",87,11,No
+03/12/2019,03/12/2019 22:05:47,"Breakfast, Lunch, Dinner",87,13,No
+05/12/2019,07/12/2019 19:11:55,"Breakfast, Lunch, Dinner, Evening",87,10,No
+06/12/2019,07/12/2019 19:12:14,"Breakfast, Lunch, Dinner, Evening",87,13,No
+08/12/2019,10/12/2019 11:53:03,"Breakfast, Lunch, Dinner, Evening",86,11,No
+09/12/2019,10/12/2019 11:53:29,"Breakfast, Lunch, Dinner",87,12,Yes
+10/12/2019,11/12/2019 21:43:31,"Breakfast, Lunch, Dinner, Evening",88,11,No
+12/12/2019,13/12/2019 08:01:58,"Breakfast, Lunch, Dinner, Evening",88,13,No
+14/12/2019,16/12/2019 14:35:53,"Breakfast, Lunch, Dinner, Evening",88,16,Yes
+15/12/2019,16/12/2019 14:36:12,"Lunch, Dinner, Evening",88,11,No
+17/12/2019,18/12/2019 08:51:29,"Breakfast, Lunch, Dinner, Evening",88,12,No
+19/12/2019,19/12/2019 07:50:36,"Breakfast, Lunch, Dinner",88,12,No
+21/12/2019,22/12/2019 17:16:41,"Breakfast, Lunch, Dinner",88,18,Yes
+22/12/2019,23/12/2019 10:31:37,"Lunch, Dinner",88,10,No
+22/12/2019,27/12/2019 12:40:28,"Breakfast, Lunch, Dinner, Evening",88,14,Yes
+23/12/2019,27/12/2019 12:40:57,"Breakfast, Lunch, Dinner, Evening",88,13,No
+24/12/2019,27/12/2019 12:41:38,"Breakfast, Lunch, Dinner, Evening",89,11,No
+25/12/2019,27/12/2019 12:42:01,"Lunch, Dinner, Evening",88,10,Yes
+27/12/2019,27/12/2019 12:42:35,"Breakfast, Lunch, Dinner",88,14,Yes
+28/12/2019,30/12/2019 11:50:29,"Breakfast, Lunch, Dinner, Evening",87,16,Yes
+29/12/2019,30/12/2019 11:48:54,"Breakfast, Lunch, Dinner",88,13,No
+30/12/2019,01/12/2019 09:31:19,"Breakfast, Lunch, Dinner",87,11,No
+31/12/2019,01/01/2020 13:54:30,"Breakfast, Lunch, Dinner",87,20,Yes
+03/01/2020,04/01/2020 09:40:09,"Breakfast, Lunch, Dinner, Evening",87,14,No
+07/01/2020,07/01/2020 07:16:57,"Breakfast, Lunch, Dinner, Evening",87,15,No
+10/01/2020,11/01/2020 12:10:49,"Breakfast, Lunch, Dinner, Evening",87,13,No
+12/01/2020,13/01/2020 09:01:40,"Breakfast, Dinner, Evening",85,10,No
+21/01/2020,21/01/2020 20:55:39,"Breakfast, Lunch, Dinner, Evening",84,11,No
+31/01/2020,31/01/2020 18:55:59,"Breakfast, Lunch, Dinner, Evening",85,13,No
+01/02/2020,02/02/2020 10:27:38,"Breakfast, Lunch, Dinner, Evening",85,11,Yes
+03/02/2020,04/02/2020 08:18:05,"Breakfast, Lunch, Dinner, Evening",85,11,No
+04/02/2020,05/02/2020 07:33:57,"Breakfast, Lunch, Dinner, Evening",85,13,No
+08/02/2020,08/02/2020 23:03:37,"Breakfast, Lunch, Dinner, Evening",85,13,No
+12/02/2020,12/02/2020 22:43:03,"Breakfast, Lunch, Dinner, Evening",85,14,No
+21/02/2020,22/02/2020 10:57:06,"Breakfast, Lunch, Dinner, Evening",85,16,Yes
+22/02/2020,23/02/2020 11:39:46,"Breakfast, Lunch, Dinner, Evening",85,10,No
+24/02/2020,25/02/2020 20:41:34,"Breakfast, Lunch, Dinner, Evening",86,14,No
+25/02/2020,26/02/2020 05:20:32,"Breakfast, Lunch, Dinner, Evening",86,13,No
+26/02/2020,28/02/2020 21:06:42,"Breakfast, Lunch, Dinner, Evening",86,10,No
+02/03/2020,03/03/2020 07:42:29,"Breakfast, Lunch, Dinner, Evening",,13,No
+05/03/2020,06/03/2020 20:08:37,"Breakfast, Lunch, Dinner, Evening",,10,No
+11/03/2020,12/03/2020 08:38:04,"Breakfast, Lunch, Dinner, Evening",,10,No
+17/03/2020,18/03/2020 21:41:58,"Breakfast, Lunch, Dinner, Evening",,10,Yes
+19/03/2020,20/03/2020 17:53:20,"Breakfast, Lunch, Dinner, Evening",,13,No
+22/03/2020,24/03/2020 09:01:50,"Breakfast, Lunch, Dinner, Evening",,14,No
+23/03/2020,24/03/2020 09:02:21,"Breakfast, Lunch, Dinner, Evening",,12,No
+30/03/2020,31/03/2020 16:36:40,"Breakfast, Lunch, Dinner, Evening",,14,No

@@ -22,6 +22,8 @@ from subject import Subject
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_ROOT = os.path.expanduser("~/Downloads/pmdata")
+if not os.path.isdir(DEFAULT_ROOT):                      # hosted copy: bundled data subset
+    DEFAULT_ROOT = os.path.join(HERE, "demo_data", "pmdata")
 START_DAY = 60
 BASELINE_DAYS = 60
 COURSE = E.HORIZON                      # 30-day monitoring course
@@ -399,7 +401,9 @@ labels = {k: L.METRICS[k][1] for k in METRIC_KEYS}
 st.caption("Simulated unit: real Fitbit data from civilian volunteers (PMData). The compound"
            + (" and the sleep reactions in three people are" if reactions_on else " is") + " simulated.")
 h1, h2 = st.columns([3, 2])
-h1.title(f"{compound_name} · unit of {len(unit)}")
+h1.title(f"Unit roster · {len(unit)} people")
+h1.caption(f"All started {compound_name} on day 0 and take it daily. "
+           "Each person is watched against their own normal.")
 with h2:
     st.markdown(f"### Day {day} of {COURSE - 1}")
     b1, b2, _ = st.columns([1, 1, 2])

@@ -20,6 +20,8 @@ RESULTS_PATH = os.path.join(HERE, "check_results.json")
 METRIC_RESULTS_PATH = os.path.join(HERE, "metric_results.json")
 ALARM_LOG = os.path.join(HERE, "alarms.jsonl")
 DEFAULT_ROOT = os.path.expanduser("~/Downloads/pmdata")
+if not os.path.isdir(DEFAULT_ROOT):                      # hosted copy: bundled data subset
+    DEFAULT_ROOT = os.path.join(HERE, "demo_data", "pmdata")
 BANNER = ("Real Fitbit data from volunteers who took nothing. "
           "Start date, schedule and any effect shown are simulated.")
 SIMULATED = "Simulated effect"
