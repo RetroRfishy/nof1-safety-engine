@@ -236,7 +236,7 @@ if trial_on:
         md_txt = f"{sc.min_detectable:.1f} SD" if sc.min_detectable is not None else "no size reliably"
         main.caption(f"{n_cycles} weekly on/off cycles, randomised · detects ≥ {md_txt} · "
                      f"{sc.p_complete:.0%} chance of a verdict")
-    trial = {"n": n_cycles, "check": sc, "schedule": schedule, "refusal": refusal}
+    trial = {"n": n_cycles, "check": sc, "schedule": schedule, "refusal": refusal, "seed": seed}
 
 demo_options = ["None", "Plant harm"] + (["Plant effect"] if trial and trial["schedule"] else [])
 sd_units = float(np.std(E.before_values(by_id[person]).to_numpy(), ddof=1))
@@ -390,6 +390,16 @@ def cusum_chart(h, upto=None):
     return fig
 
 
+def dosing_table(sched) -> pd.DataFrame:
+    rows = []
+    for i, (cyc, arm, first, usable_from) in enumerate(E.schedule_blocks(sched)):
+        last = first + pd.Timedelta(days=sched.block_days - 1)
+        rows.append({"Week": i + 1, "Cycle": cyc, "From": first.date(), "To": last.date(),
+                     "Compound": "ON: take daily" if arm == "on" else "OFF: do not take",
+                     "Counted from": usable_from.date()})
+    return pd.DataFrame(rows)
+
+
 def efficacy_section(r):
     st.subheader("Is it working for them?")
     sc, sched = trial["check"], trial["schedule"]
@@ -398,6 +408,16 @@ def efficacy_section(r):
     if sched is None:
         st.info(trial["refusal"])
     else:
+        st.markdown(f"**Dosing schedule for {person}**")
+        dt = dosing_table(sched)
+        st.dataframe(dt.style.apply(lambda row: ["background-color: #e7f1fb"] * len(row)
+                                    if row["Compound"].startswith("ON") else [""] * len(row), axis=1),
+                     hide_index=True, width="stretch")
+        st.caption(f"Each cycle is one ON week and one OFF week in a random order (seed {trial['seed']}, recorded so "
+                   f"the order can be audited). The first {sched.washout_days} days of every week are a washout and "
+                   f"are not counted.")
+        st.download_button("Download schedule (CSV)", dt.to_csv(index=False).encode(),
+                           file_name=f"{person}_{metric_key}_dosing_schedule.csv", mime="text/csv")
         eff = r["eff"]
         tbl = eff.cycles.rename(columns={"cycle": "Cycle", "order": "Order", "on_mean": f"On mean ({metric.unit})",
                                          "off_mean": f"Off mean ({metric.unit})", "d": f"Difference ({metric.unit})",
