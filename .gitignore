@@ -5,3 +5,9 @@ _backup_before_demo/
 _preview/
 alarms.jsonl
 .DS_Store
+data/
+*.zip
+replay_*.json
+data/
+*.zip
+replay_*.json

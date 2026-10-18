@@ -1,0 +1,409 @@
+<title>Compound Safety Monitor</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  /* Layout: one instrument panel — pre-committed facts on top, two stacked
+     charts sharing an x-axis, readout rail, transport below. */
+  :root {
+    --bg: #f2f4f6;
+    --surface: #ffffff;
+    --surface-2: #e9edf1;
+    --ink: #10161c;
+    --ink-2: #41505d;
+    --muted: #7b8a98;
+    --line: #d2dae1;
+    --accent: #11626b;
+    --band: rgba(17, 98, 107, .09);
+    --ok: #2e7d4f;
+    --warn: #a8690d;
+    --crit: #b4342b;
+    --crit-soft: rgba(180, 52, 43, .12);
+    --grid: rgba(16, 22, 28, .07);
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0d1217;
+      --surface: #151c23;
+      --surface-2: #1d262f;
+      --ink: #e8eef3;
+      --ink-2: #aebbc6;
+      --muted: #74838f;
+      --line: #2a353f;
+      --accent: #4fc0c9;
+      --band: rgba(79, 192, 201, .11);
+      --ok: #5fb97f;
+      --warn: #d9a03f;
+      --crit: #e86a5f;
+      --crit-soft: rgba(232, 106, 95, .16);
+      --grid: rgba(232, 238, 243, .08);
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0d1217;
+    --surface: #151c23;
+    --surface-2: #1d262f;
+    --ink: #e8eef3;
+    --ink-2: #aebbc6;
+    --muted: #74838f;
+    --line: #2a353f;
+    --accent: #4fc0c9;
+    --band: rgba(79, 192, 201, .11);
+    --ok: #5fb97f;
+    --warn: #d9a03f;
+    --crit: #e86a5f;
+    --crit-soft: rgba(232, 106, 95, .16);
+    --grid: rgba(232, 238, 243, .08);
+    color-scheme: dark;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: Archivo, "Helvetica Neue", Arial, sans-serif;
+    line-height: 1.45;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap {
+    max-width: 980px;
+    margin: 0 auto;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-block: 28px 44px;
+  }
+  .mono { font-family: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace; }
+  .tnum { font-variant-numeric: tabular-nums; }
+
+  /* ---- masthead ---- */
+  .eyebrow {
+    font-size: 11px; letter-spacing: .13em; text-transform: uppercase;
+    color: var(--muted); font-weight: 600; margin: 0 0 6px;
+  }
+  h1 {
+    font-size: clamp(26px, 5vw, 38px); line-height: 1.08; margin: 0 0 4px;
+    font-weight: 700; letter-spacing: -.02em; text-wrap: balance;
+  }
+  .sub { color: var(--ink-2); margin: 0 0 22px; font-size: 15px; max-width: 62ch; }
+
+  /* ---- pre-committed facts ---- */
+  .facts {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1px; background: var(--line); border: 1px solid var(--line);
+    border-radius: 3px; overflow: hidden; margin-bottom: 8px;
+  }
+  .fact { background: var(--surface); padding: 11px 13px; }
+  .fact dt {
+    font-size: 10.5px; letter-spacing: .09em; text-transform: uppercase;
+    color: var(--muted); font-weight: 600; margin-bottom: 3px;
+  }
+  .fact dd { margin: 0; font-size: 15px; font-weight: 500; }
+  .fact dd small { display: block; font-size: 11.5px; color: var(--muted); font-weight: 400; letter-spacing: 0; }
+  .precommit {
+    font-size: 12.5px; color: var(--muted); margin: 0 0 24px; padding-left: 2px;
+  }
+  .precommit b { color: var(--ink-2); font-weight: 600; }
+
+  /* ---- charts ---- */
+  .panel {
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: 3px; padding: 14px 10px 6px; margin-bottom: 14px;
+  }
+  .panel-head {
+    display: flex; align-items: baseline; justify-content: space-between;
+    gap: 12px; flex-wrap: wrap; padding: 0 6px 8px;
+  }
+  .panel-title { font-size: 13px; font-weight: 600; letter-spacing: .01em; }
+  .panel-note { font-size: 11.5px; color: var(--muted); }
+  svg { display: block; width: 100%; height: auto; }
+  .ax { font-size: 10px; fill: var(--muted); font-family: "IBM Plex Mono", monospace; }
+
+  /* ---- readout ---- */
+  .readout {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
+    gap: 1px; background: var(--line); border: 1px solid var(--line);
+    border-radius: 3px; overflow: hidden; margin-bottom: 14px;
+  }
+  .cell { background: var(--surface); padding: 10px 13px; min-width: 0; }
+  .cell .k {
+    font-size: 10.5px; letter-spacing: .09em; text-transform: uppercase;
+    color: var(--muted); font-weight: 600;
+  }
+  .cell .v { font-size: 19px; font-weight: 600; margin-top: 1px; }
+  .cell .v small { font-size: 12px; color: var(--muted); font-weight: 400; }
+
+  .status {
+    display: inline-flex; align-items: center; gap: 7px;
+    font-size: 13px; font-weight: 600; letter-spacing: .02em;
+  }
+  .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+  .s-ok  { color: var(--ok); }   .s-ok .dot  { background: var(--ok); }
+  .s-warn{ color: var(--warn); } .s-warn .dot{ background: var(--warn); }
+  .s-crit{ color: var(--crit); } .s-crit .dot{ background: var(--crit); }
+
+  /* ---- event log ---- */
+  .log {
+    border: 1px solid var(--line); border-radius: 3px; background: var(--surface);
+    padding: 11px 13px; margin-bottom: 18px; min-height: 68px;
+  }
+  .log h2 {
+    font-size: 10.5px; letter-spacing: .09em; text-transform: uppercase;
+    color: var(--muted); font-weight: 600; margin: 0 0 7px;
+  }
+  .log p { margin: 0 0 5px; font-size: 13px; color: var(--ink-2); }
+  .log p:last-child { margin-bottom: 0; }
+  .log .flag { color: var(--warn); font-weight: 600; }
+  .log .quiet { color: var(--muted); }
+
+  /* ---- transport ---- */
+  .transport {
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    padding: 12px 14px; border: 1px solid var(--line); border-radius: 3px;
+    background: var(--surface-2);
+  }
+  button {
+    font: inherit; font-weight: 600; font-size: 13px;
+    background: var(--accent); color: var(--surface); border: 0;
+    padding: 8px 18px; border-radius: 2px; cursor: pointer; letter-spacing: .02em;
+  }
+  button:hover { filter: brightness(1.12); }
+  button:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+  input[type=range] { flex: 1 1 180px; min-width: 120px; accent-color: var(--accent); }
+  .daylabel { font-size: 13px; color: var(--ink-2); white-space: nowrap; }
+
+  footer {
+    margin-top: 26px; padding-top: 16px; border-top: 1px solid var(--line);
+    font-size: 12px; color: var(--muted); max-width: 72ch;
+  }
+  footer b { color: var(--ink-2); font-weight: 600; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="wrap">
+  <p class="eyebrow">n-of-1 safety monitor · live replay</p>
+  <h1>Compound&nbsp;A, Specialist&nbsp;p05</h1>
+  <p class="sub">Resting heart rate arriving one day at a time from a wearable feed, scored
+    against this person's own pre-exposure baseline. The alarm limit was fixed before the
+    first monitored day and never moves.</p>
+
+  <dl class="facts" id="facts"></dl>
+  <p class="precommit" id="precommit"></p>
+
+  <div class="panel">
+    <div class="panel-head">
+      <span class="panel-title">Resting heart rate</span>
+      <span class="panel-note" id="note-hr"></span>
+    </div>
+    <svg id="chart-hr" viewBox="0 0 900 230" role="img" aria-label="Resting heart rate against the subject's normal range"></svg>
+  </div>
+
+  <div class="panel">
+    <div class="panel-head">
+      <span class="panel-title">Accumulated evidence of harm</span>
+      <span class="panel-note" id="note-cusum"></span>
+    </div>
+    <svg id="chart-cusum" viewBox="0 0 900 230" role="img" aria-label="Cumulative sum against the fixed alarm limit"></svg>
+  </div>
+
+  <div class="readout" id="readout"></div>
+
+  <div class="log" id="log">
+    <h2>Feed events</h2>
+    <div id="logbody"></div>
+  </div>
+
+  <div class="transport">
+    <button id="play">Replay from day 1</button>
+    <input type="range" id="scrub" min="0" max="18" value="18" step="1" aria-label="Day">
+    <span class="daylabel mono tnum" id="daylabel"></span>
+  </div>
+
+  <footer>
+    <b>What is simulated.</b> The heart-rate values are real, from a volunteer who took
+    nothing. The dose date, the compound and the feed's delivery lag and restatements are
+    simulated, which is how the replay exercises late and revised data. The alarm limit,
+    the reference cohort and the false-alarm rate are measured, not assumed.
+  </footer>
+</div>
+
+<script>
+const DATA = {"meta":{"subject":"p05","compound":"Compound A","metric":"resting_hr","unit":"bpm","harm_direction":"up","mu":62.75,"sd":2.83,"phi":0.742,"coverage":0.883,"h":7.742,"k":0.385,"n_expected":23,"horizon":30,"ref_subjects":11,"ref_windows":582,"fp":0.05,"dose_date":"2020-02-26","measured_fp":"7% per 30-day course","measured_detect":"a 2 SD sustained shift about half the time, typically by day 13"},"days":[{"day":63,"date":"2020-02-28","value":63.19,"z":null,"S":0,"n_valid":0,"alarm":null,"revisions":[]},{"day":64,"date":"2020-02-29","value":62.14,"z":-0.509,"S":0,"n_valid":1,"alarm":null,"revisions":[]},{"day":65,"date":"2020-03-01","value":61,"z":-0.705,"S":0,"n_valid":2,"alarm":null,"revisions":[{"date":"2020-02-28","old":63.19,"new":63.25,"scored":true}]},{"day":66,"date":"2020-03-02","value":59.8,"z":-0.898,"S":0,"n_valid":3,"alarm":null,"revisions":[{"date":"2020-02-29","old":62.14,"new":62.39,"scored":true}]},{"day":67,"date":"2020-03-03","value":58.53,"z":-1.105,"S":0,"n_valid":4,"alarm":null,"revisions":[]},{"day":68,"date":"2020-03-04","value":57.46,"z":-1.174,"S":0,"n_valid":5,"alarm":null,"revisions":[{"date":"2020-03-02","old":59.8,"new":58.32,"scored":true}]},{"day":69,"date":"2020-03-05","value":62.29,"z":1.884,"S":1.499,"n_valid":6,"alarm":null,"revisions":[]},{"day":70,"date":"2020-03-06","value":68.73,"z":3.438,"S":4.551,"n_valid":7,"alarm":null,"revisions":[]},{"day":71,"date":"2020-03-07","value":70.6,"z":1.858,"S":6.27,"n_valid":8,"alarm":null,"revisions":[{"date":"2020-03-05","old":62.29,"new":64.04,"scored":true}]},{"day":72,"date":"2020-03-08","value":69.27,"z":0.38,"S":6.265,"n_valid":9,"alarm":null,"revisions":[]},{"day":73,"date":"2020-03-09","value":67.01,"z":-0.312,"S":5.568,"n_valid":10,"alarm":null,"revisions":[]},{"day":74,"date":"2020-03-10","value":68.11,"z":1.197,"S":6.679,"n_valid":11,"alarm":null,"revisions":[{"date":"2020-03-08","old":69.27,"new":71.4,"scored":true}]},{"day":75,"date":"2020-03-11","value":67.83,"z":0.602,"S":6.896,"n_valid":12,"alarm":null,"revisions":[]},{"day":76,"date":"2020-03-12","value":66.65,"z":0.073,"S":6.583,"n_valid":13,"alarm":null,"revisions":[]},{"day":77,"date":"2020-03-13","value":67.82,"z":1.185,"S":7.578,"n_valid":14,"alarm":null,"revisions":[{"date":"2020-03-11","old":67.83,"new":69.22,"scored":true}]},{"day":78,"date":"2020-03-14","value":68.18,"z":0.909,"S":8.102,"n_valid":15,"alarm":"2020-03-14","revisions":[]},{"day":79,"date":"2020-03-15","value":70.04,"z":1.775,"S":9.492,"n_valid":16,"alarm":"2020-03-14","revisions":[]},{"day":80,"date":"2020-03-16","value":68.73,"z":0.313,"S":9.152,"n_valid":17,"alarm":"2020-03-15","revisions":[{"date":"2020-03-14","old":68.18,"new":66.28,"scored":true}]},{"day":81,"date":"2020-03-17","value":69.11,"z":1.048,"S":9.815,"n_valid":18,"alarm":"2020-03-15","revisions":[]}]};
+
+const M = DATA.meta, D = DATA.days, N = D.length;
+const NS = "http://www.w3.org/2000/svg";
+const fmtDate = s => { const [y, m, d] = s.split("-"); return d + " " + ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][+m - 1]; };
+
+/* ---------- pre-committed facts ---------- */
+const bandLo = M.mu - 2 * M.sd, bandHi = M.mu + 2 * M.sd;
+document.getElementById("facts").innerHTML = [
+  ["Their normal", `${M.mu.toFixed(1)} <small>± ${M.sd.toFixed(1)} ${M.unit}, from 60 pre-dose days</small>`],
+  ["Harm looks like", `Rising <small>sustained, not one bad day</small>`],
+  ["Reference cohort", `${M.ref_subjects} people <small>${M.ref_windows} windows, none exposed</small>`],
+  ["Alarm limit", `<span class="mono tnum">h = ${M.h.toFixed(2)}</span> <small>fixed at arming</small>`],
+  ["False alarms", `${M.measured_fp.split(" ")[0]} <small>per 30-day course, measured</small>`],
+  ["Sensitivity", `~50% <small>of a 2 SD shift, by day 13</small>`],
+].map(([k, v]) => `<div class="fact"><dt>${k}</dt><dd>${v}</dd></div>`).join("");
+
+document.getElementById("precommit").innerHTML =
+  `Limit set <b>${fmtDate(M.dose_date)}</b>, before the first monitored reading, for the ` +
+  `<b>${M.n_expected}</b> of ${M.horizon} days this person's ${Math.round(M.coverage * 100)}% ` +
+  `coverage is expected to make scorable. It is not recomputed as the course runs.`;
+
+document.getElementById("note-hr").textContent =
+  `shaded band = their own ±2 SD (${bandLo.toFixed(1)}–${bandHi.toFixed(1)} ${M.unit})`;
+document.getElementById("note-cusum").textContent =
+  `one-sided CUSUM, k = ${M.k.toFixed(2)}`;
+
+/* ---------- chart scaffolding ---------- */
+const W = 900, H = 230, L = 46, R = 14, T = 12, B = 30;
+const px = i => L + (W - L - R) * (N === 1 ? .5 : i / (N - 1));
+
+function el(tag, attrs, parent) {
+  const n = document.createElementNS(NS, tag);
+  for (const k in attrs) n.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(n);
+  return n;
+}
+function axisDates(svg, upto) {
+  for (let i = 0; i < N; i += 3) {
+    const t = el("text", { x: px(i), y: H - 9, "text-anchor": "middle", class: "ax" }, svg);
+    t.textContent = fmtDate(D[i].date);
+  }
+}
+
+/* ---------- heart-rate panel ---------- */
+function drawHR(upto) {
+  const svg = document.getElementById("chart-hr");
+  svg.innerHTML = "";
+  const lo = 55.5, hi = 72;
+  const py = v => T + (H - T - B) * (1 - (v - lo) / (hi - lo));
+
+  el("rect", { x: L, y: py(bandHi), width: W - L - R, height: py(bandLo) - py(bandHi),
+               fill: "var(--band)" }, svg);
+  [58, 62, 66, 70].forEach(v => {
+    el("line", { x1: L, x2: W - R, y1: py(v), y2: py(v), stroke: "var(--grid)" }, svg);
+    const t = el("text", { x: L - 8, y: py(v) + 3.5, "text-anchor": "end", class: "ax" }, svg);
+    t.textContent = v;
+  });
+  const bt = el("text", { x: L + 6, y: py(bandHi) - 5, class: "ax", fill: "var(--accent)" }, svg);
+  bt.textContent = "their normal range";
+
+  let d = "";
+  for (let i = 0; i <= upto; i++) d += (i ? " L" : "M") + px(i) + " " + py(D[i].value);
+  el("path", { d, fill: "none", stroke: "var(--ink-2)", "stroke-width": 1.6,
+               "stroke-linejoin": "round" }, svg);
+  for (let i = 0; i <= upto; i++) {
+    const out = D[i].value > bandHi;
+    el("circle", { cx: px(i), cy: py(D[i].value), r: i === upto ? 4.2 : 2.4,
+                   fill: out ? "var(--crit)" : "var(--accent)" }, svg);
+  }
+  axisDates(svg);
+}
+
+/* ---------- CUSUM panel ---------- */
+function drawCusum(upto) {
+  const svg = document.getElementById("chart-cusum");
+  svg.innerHTML = "";
+  const hi = 10.6;
+  const py = v => T + (H - T - B) * (1 - v / hi);
+
+  el("rect", { x: L, y: T, width: W - L - R, height: py(M.h) - T,
+               fill: "var(--crit-soft)" }, svg);
+  [0, 2, 4, 6, 8, 10].forEach(v => {
+    el("line", { x1: L, x2: W - R, y1: py(v), y2: py(v), stroke: "var(--grid)" }, svg);
+    const t = el("text", { x: L - 8, y: py(v) + 3.5, "text-anchor": "end", class: "ax" }, svg);
+    t.textContent = v;
+  });
+
+  el("line", { x1: L, x2: W - R, y1: py(M.h), y2: py(M.h), stroke: "var(--crit)",
+               "stroke-width": 1.8 }, svg);
+  const ht = el("text", { x: W - R - 4, y: py(M.h) - 7, "text-anchor": "end",
+                          class: "ax", fill: "var(--crit)" }, svg);
+  ht.textContent = `alarm limit  h = ${M.h.toFixed(2)}`;
+
+  let area = "M" + px(0) + " " + py(0);
+  for (let i = 0; i <= upto; i++) area += " L" + px(i) + " " + py(D[i].S);
+  area += " L" + px(upto) + " " + py(0) + " Z";
+  el("path", { d: area, fill: "var(--band)" }, svg);
+
+  let d = "";
+  for (let i = 0; i <= upto; i++) d += (i ? " L" : "M") + px(i) + " " + py(D[i].S);
+  el("path", { d, fill: "none", stroke: "var(--accent)", "stroke-width": 2.2,
+               "stroke-linejoin": "round" }, svg);
+
+  const firstAlarm = D.slice(0, upto + 1).findIndex(r => r.S > M.h);
+  if (firstAlarm >= 0) {
+    el("line", { x1: px(firstAlarm), x2: px(firstAlarm), y1: T, y2: H - B,
+                 stroke: "var(--crit)", "stroke-dasharray": "3 3" }, svg);
+    const t = el("text", { x: px(firstAlarm) + 5, y: T + 12, class: "ax",
+                           fill: "var(--crit)" }, svg);
+    t.textContent = "crossed";
+  }
+  for (let i = 0; i <= upto; i++) {
+    if (!D[i].revisions.length) continue;
+    el("path", { d: `M${px(i)} ${H - B + 3} l4 7 l-8 0 Z`, fill: "var(--warn)" }, svg);
+  }
+  el("circle", { cx: px(upto), cy: py(D[upto].S), r: 4.6,
+                 fill: D[upto].S > M.h ? "var(--crit)" : "var(--accent)" }, svg);
+  axisDates(svg);
+}
+
+/* ---------- readout + log ---------- */
+function drawReadout(i) {
+  const r = D[i];
+  const frac = r.S / M.h;
+  const cls = r.S > M.h ? "s-crit" : frac >= .6 ? "s-warn" : "s-ok";
+  const label = r.alarm ? "Alarm · review" : frac >= .6 ? "Approaching limit" : "Watching";
+  document.getElementById("readout").innerHTML = `
+    <div class="cell"><div class="k">Status</div>
+      <div class="v"><span class="status ${cls}"><span class="dot"></span>${label}</span></div></div>
+    <div class="cell"><div class="k">Reading</div>
+      <div class="v mono tnum">${r.value.toFixed(1)} <small>${M.unit}</small></div></div>
+    <div class="cell"><div class="k">Surprise (z)</div>
+      <div class="v mono tnum">${r.z === null ? "—" : (r.z > 0 ? "+" : "") + r.z.toFixed(2)}</div></div>
+    <div class="cell"><div class="k">Evidence</div>
+      <div class="v mono tnum">${r.S.toFixed(2)} <small>/ ${M.h.toFixed(2)}</small></div></div>
+    <div class="cell"><div class="k">Days scored</div>
+      <div class="v mono tnum">${r.n_valid} <small>/ ${M.n_expected}</small></div></div>
+    <div class="cell"><div class="k">Alarm date</div>
+      <div class="v mono tnum">${r.alarm ? fmtDate(r.alarm) : "—"}</div></div>`;
+
+  const out = [];
+  r.revisions.forEach(v => {
+    out.push(`<p><span class="flag">Restated</span> ${fmtDate(v.date)}: ` +
+      `<span class="mono tnum">${v.old.toFixed(1)} → ${v.new.toFixed(1)}</span> ${M.unit}` +
+      (v.scored ? " — already scored, so the window is recomputed from that day." : "") + `</p>`);
+  });
+  if (i > 0 && D[i].alarm !== D[i - 1].alarm) {
+    if (!D[i - 1].alarm) out.push(`<p class="flag">Alarm raised. ${fmtDate(r.alarm)}: ` +
+      `${M.metric.replace("_", " ")} has stayed above this person's normal for several days.</p>`);
+    else if (!r.alarm) out.push(`<p class="flag">Alarm withdrawn — a restated value changed the path.</p>`);
+    else out.push(`<p class="flag">Alarm date moved to ${fmtDate(r.alarm)} after the restatement.</p>`);
+  }
+  if (!out.length) out.push(`<p class="quiet">No feed events. Window rescored from scratch, as every day.</p>`);
+  document.getElementById("logbody").innerHTML = out.join("");
+}
+
+/* ---------- transport ---------- */
+let idx = N - 1, timer = null;
+const scrub = document.getElementById("scrub"), playBtn = document.getElementById("play");
+
+function render(i) {
+  idx = i;
+  drawHR(i); drawCusum(i); drawReadout(i);
+  scrub.value = i;
+  document.getElementById("daylabel").textContent =
+    `day ${D[i].day - 60} of course · ${fmtDate(D[i].date)}`;
+}
+function stop() { clearInterval(timer); timer = null; playBtn.textContent = "Replay from day 1"; }
+playBtn.addEventListener("click", () => {
+  if (timer) { stop(); return; }
+  render(0); playBtn.textContent = "Pause";
+  timer = setInterval(() => {
+    if (idx >= N - 1) { stop(); return; }
+    render(idx + 1);
+  }, 460);
+});
+scrub.addEventListener("input", e => { stop(); render(+e.target.value); });
+render(N - 1);
+</script>

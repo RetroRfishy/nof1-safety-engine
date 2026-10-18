@@ -1,0 +1,1047 @@
+\documentclass{article}
+\usepackage{float}
+\usepackage{graphicx}
+\usepackage{physics}
+\usepackage{amssymb}
+\usepackage{amsthm}
+
+\theoremstyle{plain}
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{proposition}[theorem]{Proposition}
+\newtheorem{corollary}[theorem]{Corollary}
+
+\theoremstyle{definition}
+\newtheorem{definition}{Definition}[section]
+\newtheorem{fact}{Fact}[section]
+
+\theoremstyle{remark}
+\newtheorem{remark}{Remark}[section]
+\DeclareMathOperator{\proj}{proj}
+\usepackage{bm}
+\usepackage[vmargin=1in, hmargin=1in]{geometry}
+\usepackage{mathrsfs}
+\usepackage{fontspec}
+\usepackage{enumitem}
+\usepackage{tikz}
+\usetikzlibrary{positioning, quotes, angles, decorations.pathreplacing, calc, arrows.meta}
+\renewcommand{\figurename}{Fig.}
+\usepackage{chngcntr}
+\usepackage{caption}
+\let\div\relax
+\setlength{\captionmargin}{0pt}
+\usepackage{subcaption}
+\usepackage{cancel}
+\numberwithin{equation}{section}
+\newcommand{\N}{\mathbb{N}}
+\newcommand{\Z}{\mathbb{Z}}
+\newcommand{\R}{\mathbb{R}}
+
+% Note: do NOT define \dd, \tr, \abs, \norm, \var or \div here.
+% The physics package already provides them.
+\DeclareMathOperator*{\argmin}{arg\,min}
+\counterwithin{figure}{section}
+
+\title{The Compound Monitor:\\ Algorithm and Mathematical Machinery}
+\author{Ryan Safarha \and Andrey Belokovylenko}
+\date{}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+\noindent
+A complete account of what the monitor computes, in the order it computes it.
+The mathematics is elementary: an AR(1) fit, a cumulative sum, two resampling
+procedures and a counting argument. What is not elementary, and what the
+document is really about, is \emph{where the alarm threshold comes from}. Every
+constant is labelled as a convention, a free choice, a consequence of the
+method, or a value set by measurement. Section~\ref{sec:measured} gives the
+measured results and Section~\ref{sec:constants} the full constant table.
+\end{abstract}
+
+\tableofcontents
+
+%======================================================================
+\section{Objects and notation}
+%======================================================================
+
+\paragraph{The subject.} One person is a triple $(\mathrm{id}, x, t_0)$ where
+$x$ is a real-valued series on a \emph{complete} daily index: every calendar
+day between the first and last observation appears as a row, and a day with no
+reading is $\mathrm{NaN}$ rather than an absent row. The engine enforces this
+at construction. $t_0$ is the day the compound starts. Days before $t_0$ are
+the \emph{before period}; days from $t_0$ on are the \emph{monitoring period}.
+
+Completeness of the index matters because the AR(1) model of
+Section~\ref{sec:baseline} is a statement about \emph{consecutive calendar
+days}. If missing days were dropped rather than marked, two readings a week
+apart would be treated as adjacent and the fitted autocorrelation would be
+wrong.
+
+\paragraph{The metric.} A metric is a tuple
+\[
+  (\texttt{name},\ \texttt{unit},\ \texttt{works\_direction},\
+   \texttt{harm\_direction},\ \texttt{onset\_days}),
+\]
+with the two directions in $\{\texttt{up},\texttt{down}\}$. Write
+\[
+  s_{\mathrm{harm}} = \begin{cases} +1 & \texttt{harm\_direction} = \texttt{up}\\ -1 & \text{otherwise}\end{cases}
+  \qquad
+  s_{\mathrm{works}} = \begin{cases} +1 & \texttt{works\_direction} = \texttt{up}\\ -1 & \text{otherwise.}\end{cases}
+\]
+The demo metric is resting heart rate in bpm, with
+$s_{\mathrm{works}} = -1$ (a recovery compound should lower it) and
+$s_{\mathrm{harm}} = +1$, and an onset of 2 days.
+
+\textbf{Nothing in the engine refers to heart rate.} It sees a series and a
+metric. These four fields and the two signs are the only metric-specific
+quantities in the entire pipeline, which is why the same code runs on sleep
+efficiency without modification.
+
+\subsection{The loader boundary}
+\label{sec:loader}
+
+The subject object above is the entire interface between the engine and a
+dataset. \texttt{engine.py} refers to no file format, no directory layout and no
+particular metric: it sees a series and a metric. Everything dataset-specific
+lives in a loader, so adding a dataset means writing a reader, not touching any
+of the mathematics that follows.
+
+\paragraph{What a loader must produce.} One value per person per day; a start
+date; and \emph{a complete daily index}, with NaN for days that have no reading.
+
+The third requirement is the one that bites, and it fails silently. A loader
+that simply omits missing days still runs, and the series still looks
+reasonable, but its index is no longer a run of consecutive calendar days.
+Equation~\eqref{eq:phi} then pairs readings that are a week apart as though they
+were adjacent, $\hat\phi$ is wrong, and nothing anywhere raises an error.
+
+For that reason the adapter layer exposes a single constructor,
+\texttt{to\_subject()}, which every loader is expected to end in. It maps
+sentinel values to NaN, rejects duplicate dates rather than silently keeping
+one, reindexes to the complete daily range, and refuses a before period shorter
+than \texttt{MIN\_BEFORE}. A loader that uses it cannot make the mistake above.
+
+\paragraph{What does not transfer.} Running is not the same as being
+calibrated. Several constants in Section~\ref{sec:constants} were set by
+measuring \emph{this} cohort's characteristics rather than its file format:
+\texttt{MIN\_USABLE\_DAYS} from its missingness, and
+\texttt{REF\_BASELINE\_DAYS}, \texttt{HORIZON} and \texttt{BLOCK\_DAYS} from
+records of about $150$ days with $\phi$ between $0.58$ and $0.92$. The measured
+results of Section~\ref{sec:measured} belong to this cohort, this season and
+this device.
+
+So a new dataset is loaded with a report of what the engine is about to assume
+about it --- series length, coverage, longest gap, $\hat\phi$, $n_{\mathrm{eff}}$,
+and the scorable-residual count over one horizon --- and a reminder that checks
+6, 7, 10 and 11 must be re-run to obtain its own numbers. The threshold itself
+additionally requires at least two subjects, since the default limit of
+Section~\ref{sec:reflib} is built from other people; with one subject only the
+own-baseline comparator is available, and that is the construction measured at
+$14\%$.
+
+\paragraph{A guard rather than a footnote.} Because the failure mode here is a
+tool that displays a correct-looking rate belonging to different data, the
+measured results carry a fingerprint of the cohort they came from: subject ids,
+record spans, value counts and start dates. The display refuses to quote a
+false-alarm rate whose fingerprint does not match the data currently loaded, and
+says so instead. Portability without that guard would make the tool easier to
+misuse, not easier to use.
+
+\paragraph{Three questions.} The monitor answers, for one person:
+\begin{enumerate}[nosep]
+  \item \textbf{What changed?} Before versus after (Section~\ref{sec:ba}).
+  \item \textbf{Is it harming them?} A sustained move away from their own
+    normal, flagged automatically (Sections~\ref{sec:baseline}--\ref{sec:threshold}).
+  \item \textbf{Is it working for them?} An on/off trial
+    (Section~\ref{sec:efficacy}).
+\end{enumerate}
+
+%======================================================================
+\section{What changed: the before/after comparison}
+\label{sec:ba}
+%======================================================================
+
+Let $b$ be the non-$\mathrm{NaN}$ values before $t_0$ and $a$ those from $t_0$
+on (optionally truncated to a window). With $\bar b, \hat\sigma_b$ the sample
+mean and standard deviation ($\mathrm{ddof}=1$) of $b$:
+\[
+  \text{change} = \bar a - \bar b,
+  \qquad
+  \text{standardised change} = \frac{\bar a - \bar b}{\hat\sigma_b}.
+\]
+Dividing by the \emph{before} SD is what makes the number portable: ``$+2.1$''
+reads as two of this person's usual swings, independent of units and of how
+variable they happen to be.
+
+This quantity is displayed with a fixed caveat, because it is the one
+calculation here that cannot support a causal claim:
+
+\begin{quote}
+A before/after difference alone can't show the compound caused it; season,
+training or illness could. The on/off trial is what attributes change to the
+compound.
+\end{quote}
+
+Section~\ref{sec:measured} quantifies exactly how badly this caveat is needed:
+on data where nobody took anything, a third of monitoring windows show a shift
+in the mean.
+
+%======================================================================
+\section{Phase I: the baseline model}
+\label{sec:baseline}
+%======================================================================
+
+The framework is statistical process control. Phase I characterises ``in
+control'' from a reference period, here the before period; Phase II monitors
+new observations against it.
+
+\subsection{Why a time-series model is needed at all}
+
+Resting heart rate today predicts resting heart rate tomorrow. Every
+control-chart method assumes independent observations, so the standard remedy
+is to fit a time-series model and monitor its residuals. The relevant
+magnitude is the following.
+
+\begin{theorem}[Effective sample size]
+\label{thm:neff}
+For a stationary AR(1) series with marginal variance $\sigma^2$ and
+autocorrelation $\phi$,
+\[
+  \var(\bar y)
+  = \frac{\sigma^2}{n^2}\left(n + 2\sum_{k=1}^{n-1}(n-k)\phi^k\right)
+  \;\xrightarrow[n \to \infty]{}\;
+  \frac{\sigma^2}{n}\cdot\frac{1+\phi}{1-\phi},
+\]
+so the series carries the information of
+$n_{\mathrm{eff}} = n(1-\phi)/(1+\phi)$ independent observations.
+\end{theorem}
+
+\begin{proof}
+$\var(\bar y) = n^{-2}\sum_{i,j}\operatorname{Cov}(y_i,y_j)
+= n^{-2}\sigma^2\sum_{i,j}\phi^{\abs{i-j}}$. Counting the double sum by
+diagonals gives $n$ terms with $\abs{i-j}=0$ and $2(n-k)$ terms for each
+$k = 1,\dots,n-1$. Dividing by $n$ and letting $n \to \infty$,
+\[
+  1 + 2\sum_{k=1}^{n-1}\left(1-\tfrac{k}{n}\right)\phi^k
+  \longrightarrow 1 + \frac{2\phi}{1-\phi} = \frac{1+\phi}{1-\phi},
+\]
+by dominated convergence, since $\sum\phi^k$ converges.
+\end{proof}
+
+Measured on this dataset, $\phi$ ranges from $0.58$ to $0.92$ across
+participants. At $\phi = 0.85$, $n_{\mathrm{eff}}/n = 0.082$: a 60-day
+baseline carries about five independent observations, and treating those 60
+days as independent understates standard errors by $\sqrt{12.2} \approx 3.5$.
+
+\begin{remark}[The asymptotic formula fails for short blocks]
+\label{rem:short}
+The limit in Theorem~\ref{thm:neff} requires $n \gg (1-\phi)^{-1}$. At
+$\phi = 0.85$ that is $n \gg 6.7$, so for a block of $m=5$ days the exact sum
+must be used. Exactly, $\var(\bar y) = 0.785\,\sigma^2$, giving
+$\operatorname{SD}(\bar y) = 0.89\,\sigma$, whereas the asymptotic expression
+gives $1.56\,\sigma$ and overstates the noise by a factor of $1.76$. This
+matters in Section~\ref{sec:gates}, where blocks are five usable days long.
+\end{remark}
+
+\subsection{Fitting}
+
+From the before period, keeping $\mathrm{NaN}$ rows so that adjacency is
+preserved, let $P$ be the set of present days.
+
+\paragraph{Location and scale.}
+\[
+  \hat\mu = \frac{1}{\abs{P}}\sum_{t \in P} x_t,
+  \qquad
+  \hat\sigma_x^2 = \frac{1}{\abs{P}-1}\sum_{t \in P}(x_t - \hat\mu)^2 .
+\]
+If $\abs{P} < \texttt{MIN\_BEFORE} = 14$ the engine refuses to fit.
+
+\paragraph{Autocorrelation, with gaps.} Let
+$A = \{t : t, t-1 \in P\}$ be the consecutive-present pairs. Then
+\begin{equation}
+\label{eq:phi}
+  \hat\phi = \mathrm{clip}_{[-0.95,\,0.95]}\!
+  \left(
+  \frac{\displaystyle\frac{1}{\abs{A}}\sum_{t \in A}(x_t-\hat\mu)(x_{t-1}-\hat\mu)}
+       {\displaystyle\frac{1}{\abs{P}}\sum_{t\in P}(x_t-\hat\mu)^2}
+  \right).
+\end{equation}
+This is not the textbook lag-1 autocorrelation and the difference is
+deliberate: the numerator averages only over pairs that genuinely are one day
+apart, while the denominator uses every present day, because every present day
+carries information about the variance. On a gapless series the two agree up
+to an $O(1/n)$ edge term. The clip keeps the model stationary when a short,
+noisy baseline produces $\abs{\hat\phi}$ near or above one.
+
+\paragraph{Residuals, then their scale, then standardisation.} The order
+matters and is fixed:
+\begin{equation}
+\label{eq:resid}
+  e_t = (x_t - \hat\mu) - \hat\phi\,(x_{t-1}-\hat\mu),
+  \qquad
+  \hat\sigma_e^2 = \frac{1}{\abs{E}-1}\sum_{t \in E} e_t^2,
+  \qquad
+  z_t = \frac{e_t}{\hat\sigma_e},
+\end{equation}
+where $E = A$ is the set of $t$ for which $e_t$ is defined. If either $x_t$ or
+$x_{t-1}$ is missing then $e_t$ is $\mathrm{NaN}$; the first day of the series
+has no predecessor and is $\mathrm{NaN}$ too.
+
+Under the fitted model the $z_t$ are approximately independent with mean $0$
+and variance $1$, which is what the rest of the pipeline assumes. Whether that
+survives contact with real post-start data is measured, not asserted: see
+Section~\ref{sec:diagnostic}.
+
+\paragraph{Carrying the fit forward.} The monitoring period is standardised
+with the \emph{same} $\hat\mu, \hat\phi, \hat\sigma_e$ fitted on the before
+period, applied along the whole series, so the first monitored day uses the
+last before-day as its predecessor and no day is wasted at the join.
+
+\paragraph{Valid steps.} For any window, write
+\[
+  n_{\mathrm{valid}} = \#\{t \in \text{window} : z_t \ne \mathrm{NaN}\}.
+\]
+Because $e_t$ needs two consecutive present days, if days are missing roughly
+at random with rate $q$ then $n_{\mathrm{valid}} \approx (1-q)^2$ times the
+calendar length. At $q = 0.34$ a 30-day window supplies about 13 valid steps,
+not 30. This number drives the calibration in Section~\ref{sec:threshold} and
+is the single most frequent source of silent error in a design like this.
+
+%======================================================================
+\section{The detector}
+\label{sec:detector}
+%======================================================================
+
+\begin{definition}[One-sided CUSUM]
+\label{def:cusum}
+Given standardised residuals $z_t$, a reference value $k>0$ and a sign
+$s = s_{\mathrm{harm}}$,
+\[
+  S_0 = 0,
+  \qquad
+  S_t = \max\!\left(0,\; S_{t-1} + s\,z_t - k\right),
+  \qquad \text{alarm when } S_t > h .
+\]
+If $z_t$ is $\mathrm{NaN}$ then $S_t = S_{t-1}$ and no step is taken.
+\end{definition}
+
+$S_t$ is a random walk with a reflecting barrier at the origin. The barrier is
+what makes it a monitor rather than an accumulator: evidence that does not
+persist is forgotten.
+
+\begin{proposition}[The hypotheses are separated by the sign of a drift]
+\label{prop:drift}
+If $\mathbb{E}[s z_t] < k$ the increments have negative mean, the walk is
+absorbed at the barrier and returns to $0$ infinitely often. If
+$\mathbb{E}[s z_t] > k$ the increments have positive mean, and by the strong
+law $S_t / t \to \mathbb{E}[s z]-k > 0$, so $S_t$ grows linearly and crosses
+any fixed $h$ in expected time $O(h)$.
+\end{proposition}
+
+So $k$ is not a threshold but a \emph{tilt}: it is chosen so that in control
+the walk drifts down and out of control it drifts up, and detection reduces to
+detecting the sign of a drift. This is exactly why the detector sees what a
+per-day limit and a self-report both miss. A long run of mildly elevated days
+climbs to the same place as one dramatic day, and nobody files a report for
+feeling slightly worse for three weeks.
+
+\subsection{Choosing $k$}
+
+The standard rule is to set $k$ at half the shift one wants to detect,
+measured \emph{in the units being monitored}. The units being monitored are
+residual standard deviations, while the target shift $\Delta$ is expressed in
+raw baseline SDs, so the two are related by the following attenuation.
+
+\begin{proposition}[Whitening attenuates a step shift]
+\label{prop:atten}
+A sustained shift of $\delta\sigma_x$ in the mean of an AR(1) series appears in
+the standardised residuals as
+\[
+  \delta\sqrt{\frac{1-\phi}{1+\phi}} .
+\]
+\end{proposition}
+
+\begin{proof}
+Once the shift has persisted for more than one day, both $x_t$ and $x_{t-1}$
+are displaced by $\delta\sigma_x$, so by \eqref{eq:resid} the residual retains
+$(1-\phi)\delta\sigma_x$. Dividing by
+$\sigma_e = \sigma_x\sqrt{1-\phi^2}$,
+\[
+  \frac{(1-\phi)\delta\sigma_x}{\sigma_x\sqrt{(1-\phi)(1+\phi)}}
+  = \delta\sqrt{\frac{1-\phi}{1+\phi}} . \qedhere
+\]
+\end{proof}
+
+Hence
+\begin{equation}
+\label{eq:k}
+  k = \frac{\Delta}{2}\sqrt{\frac{1-\hat\phi}{1+\hat\phi}},
+  \qquad \Delta = 2.0,
+\end{equation}
+computed per person from that person's own $\hat\phi$. At $\hat\phi = 0.85$
+the attenuation factor is $0.28$, so $k \approx 0.28$ and a $2\sigma$ raw
+shift arrives as about $0.56$ in residual units.
+
+\begin{remark}[The price, and a prediction that was wrong]
+Proposition~\ref{prop:atten} says the detector sees only $28\%$ of the shift it
+would see on independent data. That is the accepted price of a valid
+false-alarm rate, and an invalid false-alarm rate is not a weaker guarantee but
+no guarantee at all. It is worth recording that the author predicted whitening
+would \emph{cost power} relative to an unwhitened chart, and it does not: the
+null is attenuated by the same factor, so the signal-to-noise ratio is
+unchanged. Only the ratio matters.
+\end{remark}
+
+%======================================================================
+\section{The threshold}
+\label{sec:threshold}
+%======================================================================
+
+Let
+\[
+  M = \max_{1 \le t \le n_{\mathrm{valid}}} S_t
+\]
+be the running maximum over one monitoring course. We need
+\[
+  h = F_M^{-1}(1-\alpha), \qquad \alpha = \texttt{FP} = 0.05,
+\]
+the $(1-\alpha)$ quantile of the null distribution of $M$. There is no closed
+form. \textbf{Where $F_M$ comes from is the entire design question of this
+project}, and the false-alarm rate is the only quantity the project really
+measures.
+
+\begin{proposition}[The horizon must match]
+\label{prop:horizon}
+$F_M$ depends on the number of \emph{scored steps}, and $M$ is nondecreasing in
+that number, since the maximum is taken over a larger set. A limit calibrated
+for $n_1$ steps and applied over $n_2 > n_1$ over-alarms; applied over
+$n_2 < n_1$ it under-alarms.
+\end{proposition}
+
+This is why $n_{\mathrm{valid}}$, not the calendar length, is passed to every
+calibration routine. A person with 34\% missing days takes about 13 steps in a
+30-day window, and a threshold built for 30 steps would make them look
+well-calibrated while silently costing sensitivity --- on exactly the subjects
+whose data is worst.
+
+\subsection{Calibration A: the own-baseline bootstrap (the comparator)}
+
+\begin{enumerate}[nosep]
+  \item Take the standardised before-period residuals $z^{\mathrm{base}}$,
+    $\mathrm{NaN}$s dropped.
+  \item Draw $n_{\mathrm{valid}}$ of them with replacement; run
+    Definition~\ref{def:cusum}; record $\max_t S_t$.
+  \item Repeat $N = 1000$ times. Set $h$ to the $95$th percentile of those
+    maxima.
+\end{enumerate}
+
+Because Section~\ref{sec:baseline} has already whitened the series, resampling
+single residuals with replacement is the ordinary residual bootstrap; no block
+structure is needed here.
+
+This calibration needs nobody but the subject, which is its only advantage.
+
+\begin{proposition}[Why it fails]
+\label{prop:fails}
+The procedure computes a quantile of $f^{\mathrm{assumed}}_{H_0}$, the null
+built from the before period. The monitoring days follow
+$f^{\mathrm{true}}_{H_0}$. If the mean shifts between the two periods these are
+different distributions, and the $(1-\alpha)$ quantile of one is not that of
+the other. Increasing $N$ converges to the quantile of the wrong distribution.
+\end{proposition}
+
+The error is therefore bias, not noise, and it has a direction: the assumed
+null contains none of the post-baseline drift, so it is too tight, $h$ is too
+low, and false alarms exceed nominal. Measured: $14.0\%$ against a nominal
+$5\%$.
+
+\subsection{Calibration B: the reference library (the default)}
+\label{sec:reflib}
+
+Replace the assumed null with a real one, built from other people who took
+nothing.
+
+\paragraph{Building the library.} For each subject $j$ other than the target,
+slide through $j$'s post-start series \emph{in valid-step space}: for every
+index $i$ whose residual $z_i$ is defined and which lies at or after $j$'s own
+start,
+\begin{enumerate}[nosep]
+  \item \textbf{Rebase.} Form the subject restricted to the
+    $\texttt{REF\_BASELINE\_DAYS} = 60$ calendar days ending at $i-1$, with
+    start $i$.
+  \item \textbf{Re-fit.} Fit $\hat\mu,\hat\phi,\hat\sigma_e$ on that
+    60-day window. If it holds fewer than $14$ present days, skip this window.
+  \item \textbf{Score.} Compute residuals from day $i-1$ onward, standardise,
+    drop $\mathrm{NaN}$s and keep the first $\texttt{HORIZON}=30$ of them.
+\end{enumerate}
+One window is produced per valid post-start day. On this dataset that is $876$
+windows from $13$ subjects.
+
+\paragraph{The threshold.} Given the target's $n_{\mathrm{valid}}$ and $k$:
+take every library window belonging to another subject that supplies at least
+$n_{\mathrm{valid}}$ residuals, truncate each to its first $n_{\mathrm{valid}}$,
+run the CUSUM \emph{with the target's own $k$}, and set $h$ to the $95$th
+percentile of the resulting maxima. The statistic is therefore ``what would
+\emph{this} detector have done on \emph{that} person's unexposed data,'' which
+is the right null for the question being asked.
+
+Leaving the target out is not optional. Including their own data would fit the
+decision rule to the test data and the error estimate would mean nothing.
+
+\paragraph{Why the baseline is re-fitted per window.} A single fixed baseline
+would score a window 90 days later against a 90-day-old reference, which no
+real course does. Worse, most subjects in this dataset share a start date, so
+the earliest windows all cover the same calendar stretch; sliding one step at a
+time then replicates that one shared drift episode into hundreds of
+overlapping windows until the $95$th percentile lands inside it. Measured: the
+demo subject's $h$ rises from $8.5$ to $16.9$ and detection falls to $21\%$.
+Re-fitting per window removes it.
+
+\subsection{What the library can and cannot buy}
+\label{sec:quantile}
+
+\begin{proposition}[A quantile from a small sample]
+\label{prop:smallq}
+The sample $(1-\alpha)$ quantile from $m$ independent draws from a density $f$
+has asymptotic variance $\alpha(1-\alpha)/(m f(q)^2)$, which is large for small
+$m$ and larger still in a tail where $f(q)$ is small. At $\alpha = 0.05$ and
+$m = 13$, $\Pr(\text{all 13 draws lie below } q) = 0.95^{13} = 0.51$: about
+half the time the entire sample sits below the quantity being estimated.
+\end{proposition}
+
+Overlapping windows do not increase $m$. Windows from one person share almost
+all their data, so the effective sample size is the \emph{subject} count, not
+the window count. Both are reported everywhere.
+
+\begin{remark}[Measured]
+Recomputing $h$ with each library subject left out in turn moves it by
+$10\%$ to $46\%$ of its value (median $37\%$); for the demo subject the range
+is $5.75$ to $8.68$. One subject dominates: $22$ of the $30$ largest library
+maxima are theirs, and dropping them lowers $h$ for $10$ of $13$ subjects.
+
+Yet the false-alarm \emph{rate} barely moves: $7.0\%$ for twelve of the
+thirteen removals, $11.6\%$ for the one. The threshold swings across a gap in
+the null's order statistics where few observed maxima lie, so a large change in
+$h$ produces a small change in the rate. Both numbers are reported, because the
+first is the measured reason a deployment needs a reference cohort of $50$ to
+$100$ people rather than $13$, and enlarging the library cannot substitute:
+going from $60$ to $500$ windows moved $h$ by $0.4$.
+\end{remark}
+
+%======================================================================
+\section{Is it working? The on/off trial}
+\label{sec:efficacy}
+%======================================================================
+
+The safety arm needs no assumption about the compound. The efficacy arm needs
+to attribute a change to it, which requires a design rather than an analysis.
+
+\paragraph{The design.} $n$ cycles. Each cycle is two adjacent blocks of
+$\texttt{BLOCK\_DAYS}=7$ days, one on and one off, with the order inside the
+cycle decided by a coin flip. The first $\texttt{onset\_days}$ of every block
+are excluded from analysis as washout, since a compound with a half-life is
+still present after a block ends. With a 2-day onset, each block contributes
+five usable days.
+
+\paragraph{The statistic.} For each cycle with both blocks usable (at least
+$\texttt{MIN\_USABLE\_DAYS}=2$ post-washout days each), let
+\[
+  d_c = \overline{(\text{on block})} - \overline{(\text{off block})},
+\]
+the difference of post-washout means. Block means rather than individual days,
+because days are autocorrelated and treating them as independent inflates false
+positives; averaging within blocks is the standard n-of-1 remedy.
+
+\subsection{The randomisation test}
+
+\begin{definition}[Randomisation $p$-value]
+Let $G$ be the set of label assignments the randomisation could have produced
+and $T(y,g)$ the statistic under assignment $g$. Then
+\[
+  p = \frac{\#\{g \in G : \abs{T(y,g)} \ge \abs{T(y,g_{\mathrm{obs}})}\}}{\abs{G}} .
+\]
+\end{definition}
+
+Validity comes from the coin flips that were actually made. Under the null that
+the compound does nothing, the observed data would have been identical
+whichever assignment came up, so all $\abs{G}$ values of $T$ were equally
+likely and the rank of the observed one is uniform. \textbf{No normality, no
+independence and no stationarity is assumed, so none of them can break it.}
+This is why the efficacy arm is untouched by the $\phi \approx 0.85$ problem
+that dominates the safety arm.
+
+Here the order is randomised \emph{within each cycle}, so $G$ is the set of
+sign patterns $\{\pm 1\}^n$ and $\abs{G} = 2^n$.
+
+\begin{theorem}[Minimum attainable $p$]
+\label{thm:pmin}
+The map $g \mapsto g^c$ that flips every sign is an involution on $G$ with
+$T(y,g^c) = -T(y,g)$. Hence $\abs{T}$ is constant on complementary pairs, the
+observed assignment always ties with its own complement, the numerator is at
+least $2$, and
+\[
+  p_{\min} = \frac{2}{2^n}.
+\]
+\end{theorem}
+
+\begin{corollary}[$\texttt{MIN\_CYCLES} = 6$]
+$p_{\min} < \alpha = 0.05$ requires $2^n > 40$, hence $n \ge 6$. At $n=3$,
+$p_{\min} = 0.25$; at $n=5$, $0.0625$; at $n=6$, $0.03125$.
+\end{corollary}
+
+This is a statement about the cardinality of a finite set, not about power. No
+effect size, no amount of data and no better instrument changes it. Below six
+cycles the app refuses the schedule and says why, \emph{before} it is run,
+because a tool that accepts a 3-cycle schedule, runs it for six weeks and
+reports $p = 0.25$ has produced a confident-looking null determined by the
+calendar rather than the compound.
+
+\begin{corollary}[The test is conservative by construction]
+\label{cor:conservative}
+The attainable $p$-values lie on the grid $\{2/2^n, 4/2^n, \dots\}$. At $n=6$,
+$p < 0.05$ means $p = 2/64 = 0.031$ exactly, so the true false-positive rate is
+about $3.1\%$ rather than $5\%$. Measured: $3.6\%$ over $140$ null runs.
+\end{corollary}
+
+\subsection{Dropped cycles}
+
+If some cycles are unusable the test runs on the survivors, and the
+implementation handles this by zero-padding rather than by re-indexing.
+
+\begin{lemma}[Zero-padding preserves the $p$-value]
+\label{lem:pad}
+Let $k$ of $n$ cycles be usable and set $d_c = 0$ for the rest. Then the
+proportion of sign patterns in $\{\pm1\}^n$ at least as extreme as the observed
+one equals the proportion over the $2^k$ patterns on the usable cycles alone.
+\end{lemma}
+
+\begin{proof}
+The statistic $\sum_c \varepsilon_c d_c$ does not depend on $\varepsilon_c$
+when $d_c = 0$. So each of the $2^k$ distinct values arising from the usable
+cycles is attained by exactly $2^{n-k}$ patterns of the full set. Both
+numerator and denominator are multiplied by $2^{n-k}$, and the ratio is
+unchanged.
+\end{proof}
+
+The reported floor uses $k$, not $n$: a trial that was scheduled for eight
+cycles and kept seven is judged at $p_{\min} = 2/2^7$.
+
+\subsection{The verdict}
+
+With $k$ usable cycles, $\bar d$ their mean and $p$ the randomisation
+$p$-value:
+\[
+  \begin{cases}
+    \textbf{Not enough usable cycles} & k < \texttt{MIN\_CYCLES} \\
+    \textbf{Consistent effect: working} & p < \alpha,\ \operatorname{sign}\bar d = s_{\mathrm{works}} \\
+    \textbf{Consistent effect: opposite to intended} & p < \alpha,\ \operatorname{sign}\bar d = -s_{\mathrm{works}} \\
+    \textbf{No consistent effect detected} & \text{otherwise.}
+  \end{cases}
+\]
+The last is always shown with the sentence \emph{``This is not the same as no
+effect. This schedule reliably detects effects of about $m$ SDs or larger,''}
+with $m$ from Section~\ref{sec:gates}. An ``opposite'' verdict is displayed
+alongside the harm status, since a compound moving the metric the wrong way is
+a safety observation as much as an efficacy one.
+
+%======================================================================
+\section{The three gates}
+\label{sec:gates}
+%======================================================================
+
+Before a schedule is run, three numbers are computed and shown. They answer
+three different questions, and conflating them is how a trial ends up producing
+a meaningless null.
+
+\begin{center}
+\begin{tabular}{lll}
+quantity & question & section \\
+\hline
+$p_{\mathrm{floor}}$ & can a result exist at all? & \ref{thm:pmin} \\
+$p_{\mathrm{complete}}$ & will the trial finish? & \ref{sec:pcomplete} \\
+$m_{\mathrm{det}}$ & would a real effect be found? & \ref{sec:mdet} \\
+\end{tabular}
+\end{center}
+
+\subsection{A precondition before any probability}
+\label{sec:fit}
+
+If the schedule runs past the last day with data, there is nothing to compute.
+A schedule of $n$ cycles beginning at $t_0$ ends at
+$t_0 + 2n\cdot\texttt{BLOCK\_DAYS} - 1$, and the engine raises an error naming
+how many cycles would fit instead. This is a length check of the same kind the
+loader already applies to the before period, and it is the right answer for a
+device that stopped recording: not ``$81\%$ chance of completing'' but ``this
+schedule does not fit in the available record.''
+
+On this dataset, six of thirteen subjects are rejected here and seven fit.
+
+\subsection{$p_{\mathrm{complete}}$: will the trial finish?}
+\label{sec:pcomplete}
+
+A block is dropped if it has fewer than $\texttt{MIN\_USABLE\_DAYS}$
+post-washout days with data; a cycle needs both of its blocks; the verdict needs
+$\texttt{MIN\_CYCLES}$ cycles. So
+\[
+  p_{\mathrm{complete}} = \Pr\big(\text{at least } \texttt{MIN\_CYCLES}
+  \text{ of } n \text{ cycles survive}\big).
+\]
+
+\paragraph{Not the probability that all survive.} The verdict needs six usable
+cycles, not every scheduled one: schedule ten, lose three, and the test runs on
+seven. The all-must-survive version \emph{decreases} as cycles are added, which
+would make ``consider more cycles'' actively harmful advice; the correct version
+increases. The two coincide exactly at $n = \texttt{MIN\_CYCLES}$, which is why
+the error is invisible there.
+
+\paragraph{The binomial version, and why it is not enough.} If missing days
+were independent with coverage $c$, then with $u$ post-washout days per block,
+\[
+  p_{\mathrm{block}} = \Pr(\mathrm{Bin}(u,c) \ge \texttt{MIN\_USABLE\_DAYS}),
+  \qquad
+  p_{\mathrm{complete}} = \Pr\!\left(\mathrm{Bin}(n, p_{\mathrm{block}}^2) \ge \texttt{MIN\_CYCLES}\right).
+\]
+Real missing days come in runs, and a run is far more destructive than the same
+number of scattered days: losing two days of five leaves the block usable,
+while losing five consecutive days destroys the block, the cycle and (without
+slack) the trial. The binomial cannot see this. Measured, the binomial
+predicted $0.06$ to $0.90$ for the two gap-prone subjects, and both reached a
+verdict in $0$ of $20$ real schedules.
+
+\paragraph{The moving-block bootstrap.} Instead of modelling the gap pattern,
+resample it. Take the subject's own before-period missingness indicator
+$m \in \{0,1\}^{N}$. For block length $L$, draw $\lceil T/L \rceil$ starting
+positions uniformly from $\{0,\dots,N-L\}$, concatenate the blocks $m[s:s+L]$
+and truncate to the trial length $T$. Lay the result over the planned schedule
+and count whether at least $\texttt{MIN\_CYCLES}$ cycles survive. Repeat
+$10{,}000$ times.
+
+Runs appear automatically because runs are what is being resampled, and the
+pattern is the subject's own rather than an assumed one.
+
+\paragraph{The block length is not a free choice.} $L$ changes the answer: for
+one subject $p_{\mathrm{complete}}$ is $0.90 / 0.79 / 0.64 / 0.77$ at
+$L = 3,5,7,14$, and the warning fires at $0.8$. A gate whose output depends on
+an arbitrary constant is not a gate, so the engine computes all four and
+\textbf{reports the minimum}. That is the conservative end of a sensitivity
+analysis rather than a tuned value: a warning should fire if any defensible
+assumption says it should. All four are shown in the app.
+
+The non-monotonicity in $L$ is itself informative. It means that subject's gaps
+have structure at a particular scale rather than being random runs, and 7-day
+blocks happen to reproduce it.
+
+If the before period is shorter than $\texttt{MIN\_RESAMPLE\_DAYS} = 28$ there
+is too little pattern to resample and the binomial is used, flagged as
+optimistic.
+
+\paragraph{One standing caveat.} $p_{\mathrm{complete}}$ is conditional on the
+device continuing to record as it has been. Nothing can predict a watch that
+stops.
+
+\subsection{$m_{\mathrm{det}}$: would a real effect be found?}
+\label{sec:mdet}
+
+$p_{\mathrm{floor}}$ says a result is \emph{possible}; this says whether it is
+\emph{likely}. Simulate the whole pipeline:
+
+\begin{enumerate}[nosep]
+  \item Generate $N$ trials of length $T = 2nB$ from the fitted AR(1) with unit
+    marginal variance: $x_1 \sim N(0,1)$ and
+    $x_t = \hat\phi x_{t-1} + \varepsilon_t$,
+    $\varepsilon_t \sim N(0, 1-\hat\phi^2)$. Unit marginal SD means an effect
+    of $\delta$ is $\delta$ baseline SDs by construction.
+  \item Apply a missingness draw from Section~\ref{sec:pcomplete}, at the block
+    length that produced the minimum.
+  \item Randomise the on/off order within each cycle.
+  \item Add $s_{\mathrm{works}}\,\delta$ on the on-blocks, ramped linearly over
+    $\texttt{onset\_days}$ at the start of each on-block --- the same shape
+    \texttt{plant\_effect} uses, so ``would be found'' and ``was found'' cannot
+    contradict each other.
+  \item Compute block means, cycle differences, the usable-cycle mask and the
+    exact randomisation $p$. A trial counts as detected when it has at least
+    $\texttt{MIN\_CYCLES}$ usable cycles, $p < \alpha$, \emph{and} the mean
+    difference has the intended sign.
+  \item Sweep $\delta$ over $0.1, 0.2, \dots$ and report the first reaching
+    $80\%$.
+\end{enumerate}
+
+\paragraph{The plateau rule.} Power can never exceed $p_{\mathrm{complete}}$,
+since a trial that does not finish cannot detect anything. When that ceiling
+sits within two standard errors of the target,
+\[
+  p_{\mathrm{complete}} < 0.80 + 2\sqrt{\frac{0.8 \times 0.2}{N}} \approx 0.825
+  \quad (N = 1000),
+\]
+the power curve is flat near the target and any crossing is a draw from a flat
+region. The engine then reports \textbf{not reachable} rather than a number,
+because quoting $2.4$ when $2.8$ and $3.2$ are equally consistent implies a
+precision that does not exist.
+
+%======================================================================
+\section{Planting}
+%======================================================================
+
+PMData participants took nothing, so there is no real effect in the data. Two
+functions inject one, and they are the only way an effect enters.
+
+\paragraph{Harm.} From $t_0 + 5$ days, add
+$s_{\mathrm{harm}}\,\delta\,\hat\sigma_x$ to every value, ramped linearly over
+three days and sustained thereafter. $\mathrm{NaN}$ days stay $\mathrm{NaN}$.
+
+\paragraph{Effect.} Add $s_{\mathrm{works}}\,\delta\,\hat\sigma_x$ during
+on-blocks only, ramped over $\texttt{onset\_days}$ at the start of each
+on-block, matching the washout exactly so that the ramp falls entirely inside
+the excluded days.
+
+Both return a new subject with $\texttt{simulated} = \mathrm{True}$, a flag
+that survives every transformation and drives the on-screen label. The two
+controls are mutually exclusive in the app, since the works and harm directions
+are opposite and planting both would partially cancel during on-blocks.
+
+\begin{remark}[Planting is a measurement, not a fabrication]
+Injecting a known signal to characterise an instrument is what calibration is:
+a smoke detector is tested with a known quantity of smoke. The property that
+makes it honest is that the answer is known before you look, so there is no
+room to interpret the outcome favourably. Note also the separation of concerns:
+the \emph{false-alarm} rate is measured on entirely unmodified real data, where
+every alarm is false by construction, and planting enters only the
+\emph{detection} measurement. Finally, the result is unflattering --- $53\%$ ---
+which is what a measurement looks like and what a fabrication does not.
+\end{remark}
+
+%======================================================================
+\section{The acceptance checks}
+%======================================================================
+
+Eleven checks, run as one script. Some have pass conditions; three are
+measurements reported without a threshold, because a quantity you are
+measuring cannot also be a target you are hitting.
+
+\begin{center}
+\begin{tabular}{rll}
+\# & what it tests & kind \\
+\hline
+1 & loader: complete index, no zeros, NaN accounting & pass/fail \\
+2 & before/after on a known $+5$ shift at SD $2$ & pass/fail \\
+3 & $\hat\phi$ recovery and residual whitening on synthetic AR(1) & pass/fail \\
+4 & CUSUM at rest: all-zero $z$ gives all-zero $S$ & pass/fail \\
+5 & bootstrap self-consistency: fresh windows alarm at $5\%$ & pass/fail \\
+6 & \textbf{false alarms on real unexposed data, both limits} & measured \\
+7 & detection with a planted $2\sigma$ harm, both limits & pass/fail \\
+8 & the three gates, the length precondition, block sensitivity & pass/fail \\
+9 & efficacy wiring on a planted effect & pass/fail \\
+10 & \textbf{efficacy false positives on real data} & measured \\
+11 & \textbf{baseline-model diagnostic on real monitoring days} & measured \\
+\end{tabular}
+\end{center}
+
+Check 5 deserves a note: it resamples from the same residuals the limit was
+built from, so it verifies the \emph{code} and says nothing about real-world
+validity. It is checks 6 and 11 that do that.
+
+\subsection{Check 11: the free diagnostic}
+\label{sec:diagnostic}
+
+Everything downstream assumes the fitted $\hat\mu, \hat\phi, \hat\sigma_e$
+still describe the person during monitoring. Check 11 tests that directly, with
+no detector, no simulation and no planting. On each real monitoring window,
+compute $z_t$ and report the distribution across windows of
+\[
+  \bar z \quad (\text{should be } 0),
+  \qquad
+  \operatorname{SD}(z) \quad (\text{should be } 1),
+\]
+together with the share of windows where
+$\abs{\bar z} > 2/\sqrt{n_{\mathrm{valid}}}$, roughly two standard errors.
+
+This is the free diagnostic: no labels, no held-out data, no detector output.
+It separates the two ways the model can fail, which nothing else in the build
+does. $\bar z \ne 0$ is a \emph{location} error, the mean moved;
+$\operatorname{SD}(z) \ne 1$ is a \emph{scale} error, $\hat\phi$ or
+$\hat\sigma_e$ was mis-estimated. The $14\%$-versus-$7\%$ comparison tells you
+the null is wrong but not which.
+
+%======================================================================
+\section{Measured results}
+\label{sec:measured}
+%======================================================================
+
+PMData (Thambawita et al., Simula; CC BY 4.0), daily resting heart rate from 16
+participants of whom 13 are usable, recorded November to March. Nobody took
+anything, so every alarm below is false by construction. Windows start at days
+$60, 74, 88, 102$, each with its own 60-day baseline; $43$ windows from $13$
+subjects.
+
+\paragraph{Safety arm.}
+\begin{center}
+\begin{tabular}{lcc}
+ & reference limit (default) & own baseline (comparator) \\
+\hline
+false alarms & $7.0\%$ ($3/43$) & $14.0\%$ ($6/43$) \\
+Wilson 95\% CI & $2.4$--$18.6\%$ & $6.6$--$27.3\%$ \\
+subjects with an alarm & $2/13$ & $5/13$ \\
+$2\sigma$ harm caught within 30 d & $53\%$ ($23/43$) & $79\%$ ($34/43$) \\
+days to alarm, median (IQR) & $13$ ($10$--$22$) & $11$ ($8$--$17$) \\
+\end{tabular}
+\end{center}
+
+\noindent Intervals treat windows as independent; they overlap within a
+person, so the true intervals are wider.
+
+The own-baseline limit catches more \emph{because its $h$ is lower}, which is
+the same fact as its $14\%$ false-alarm rate rather than a separate benefit.
+These are one detector at two points on the same curve, not two methods.
+
+\paragraph{Detection depends on the person's own drift.} Splitting the 43
+windows by their check-11 mean $z$:
+\begin{center}
+\begin{tabular}{lcc}
+window's own drift & planted harm caught & median day \\
+\hline
+toward harm ($\bar z > 0$) & $14/15$ ($93\%$) & $11$ \\
+away from harm & $9/28$ ($32\%$) & $21$ \\
+\end{tabular}
+\end{center}
+So $53\%$ is not a per-person coin flip; it is a blend of near-certain and
+unlikely, and which applies cannot be known in advance. The split uses the same
+days the detector scores, so it describes outcomes rather than predicting them.
+It also cannot be turned into a runtime confidence qualifier: a window drifting
+toward harm and a window containing harm are the same observation, so $\bar z$
+carries no information the detector does not already use.
+
+\paragraph{Efficacy arm.} False positives $3.6\%$ ($5/140$ runs, Wilson
+$1.5$--$8.1\%$), against $3.1\%$ expected from
+Corollary~\ref{cor:conservative}. Minimum detectable effect $1.7$ to
+$1.9$ baseline SDs for subjects whose schedule fits, about $\pm 0.1$ of Monte
+Carlo noise. Seven of thirteen subjects can run a six-cycle trial; none fits
+eight.
+
+\paragraph{Check 11.}
+\begin{center}
+\begin{tabular}{lcc}
+ & measured over 43 windows & if the model held \\
+\hline
+$\operatorname{SD}(z)$ & median $0.97$ (IQR $0.79$--$1.10$), RMS $1.02$ & $1$ \\
+$\bar z$ & median $-0.09$ (IQR $-0.43$ to $+0.10$), range $-0.85$ to $+0.69$ & $0$ \\
+$\abs{\bar z} > 2/\sqrt{n_{\mathrm{valid}}}$ & $15/43$ ($35\%$), Wilson $22$--$50\%$ & about $5\%$ \\
+lag-1 autocorr.\ of $z$ & median $+0.12$ (IQR $-0.08$ to $+0.27$) & $0$ \\
+\end{tabular}
+\end{center}
+
+Read this as three statements.
+
+\textbf{The scale holds.} $\hat\phi$ and $\hat\sigma_e$, fitted on 60 days
+before exposure, carry over to the monitoring period. This is the half of the
+model that had to work: a scale error would mean $z$ is not comparable between
+people, so borrowing other people's CUSUM maxima would be borrowing numbers in
+different units and Section~\ref{sec:reflib} would be invalid.
+
+\textbf{The location fails, with no common direction.} The median $\bar z$ is
+essentially zero while the spread runs from $-0.85$ to $+0.69$. This is the
+measured answer to ``why not just correct for the drift?'': there is no common
+drift to subtract, so a population template would change nothing. Only a
+reference-group threshold helps, because it absorbs spread where a template
+removes a mean.
+
+\textbf{A small residual autocorrelation remains.} The $2/\sqrt{n}$ bound
+assumes independent residuals, and $z$ retains a lag-1 of $+0.12$, consistent
+with $\hat\phi$ being biased low by roughly $(1+3\phi)/n \approx 0.06$ from a
+60-day fit. Widening the bound to allow for it still leaves $13$ of $43$
+windows. A bias-corrected $\hat\phi$ is the measured next step; it is not
+implemented, and the screens state the measured $7\%$ rather than the nominal
+$5\%$, so nothing is claimed that has not been measured.
+
+%======================================================================
+\section{The constants}
+\label{sec:constants}
+%======================================================================
+
+\begin{center}
+\begin{tabular}{llp{7.6cm}}
+name & value & status \\
+\hline
+$\texttt{FP}$ & $0.05$ & convention; false-alarm rate per course \\
+$\texttt{ALPHA}$ & $0.05$ & convention; efficacy significance level \\
+$\texttt{N\_SIMS}$ & $1000$ & enough for a stable 95th percentile \\
+$\texttt{HORIZON}$ & $30$ d & choice; length of one course \\
+$\texttt{DELTA}$ & $2.0$ & choice; shift the detector is tuned for \\
+$\texttt{MIN\_BEFORE}$ & $14$ d & choice; refuse to fit below this \\
+$\texttt{BLOCK\_DAYS}$ & $7$ & choice; valid only for compounds acting within \texttt{onset\_days} \\
+$\texttt{REF\_BASELINE\_DAYS}$ & $60$ d & choice; re-fitted per library window \\
+$\texttt{MISS\_BLOCK\_LENGTHS}$ & $3,5,7,14$ & choice; $p_{\mathrm{complete}}$ is the \emph{minimum} over them \\
+$\texttt{MIN\_RESAMPLE\_DAYS}$ & $28$ & choice; below this, fall back to the binomial \\
+start day & $60$ & choice (demo only; there is no real exposure) \\
+plant sizes & $2.0,\ 1.0$ & choice; always labelled \\
+\hline
+$k$ & eq.~\eqref{eq:k} & \textbf{follows} from $\Delta$, $\hat\phi$ and Prop.~\ref{prop:atten} \\
+$\texttt{MIN\_CYCLES}$ & $6$ & \textbf{follows} from $p_{\min}=2/2^n$ and \texttt{ALPHA} \\
+$\texttt{DEFAULT\_CYCLES}$ & $8$ & \textbf{follows}: two cycles of slack, so one bad week does not end a trial \\
+plateau cutoff & $0.825$ & \textbf{follows}: two standard errors above $0.80$ at $N=1000$ \\
+\hline
+$\texttt{MIN\_USABLE\_DAYS}$ & $2$ & \textbf{measured}: at $3$, completion is $0.49/0.24/0.05$ at $20/26/34\%$ missing, and dropping to $2$ costs nothing on complete data \\
+$\texttt{N\_SIMS\_COMPLETE}$ & $10{,}000$ & \textbf{measured}: $\pm 0.01$ noise, so the $0.8$ warning is not seed-dependent \\
+\end{tabular}
+\end{center}
+
+%======================================================================
+\section{What this does and does not establish}
+%======================================================================
+
+\paragraph{Established.} Calibrating a per-person monitor from the subject's
+own pre-exposure baseline alarms on $14\%$ of unexposed monitoring courses
+against a nominal $5\%$, and the cause is a location error with no common
+direction (Section~\ref{sec:diagnostic}). A leave-one-subject-out reference
+threshold brings this to $7\%$ while still catching $53\%$ of a sustained
+$2\sigma$ shift, typically by day 13. Both numbers are measured on real data
+from people who took nothing.
+
+\paragraph{Not established, and stated as such.}
+\begin{itemize}[nosep]
+  \item Transfer. The $7\%$ and $53\%$ belong to this cohort, this season and
+    this device. Check 11 shows the location error is substantial and
+    person-specific, so a new deployment must measure its own.
+  \item Seasonality. Every participant was recorded November to March, so
+    cohort-wide seasonal drift sits inside the empirical null instead of being
+    caught by it. The $7\%$ is optimistic for a cohort spread across different
+    months, and this cannot be fixed with this dataset.
+  \item Cohort size. With $13$ subjects the threshold is effectively set by one
+    person's drift episode (Section~\ref{sec:quantile}). A deployment needs
+    $50$ to $100$.
+  \item Trial length. The efficacy arm needs six cycles at minimum and eight by
+    default, roughly $112$ days plus a baseline. No subject here fits eight.
+  \item Multiplicity. One primary metric per compound, fixed in advance.
+    Monitoring four at a nominal $5\%$ each gives $1-0.95^4 = 18.5\%$ per
+    course.
+  \item Portability. The engine runs on any dataset that can be turned into
+    subjects (Section~\ref{sec:loader}), and this has been exercised once
+    already on a second metric with different units, a different direction
+    convention and a different missingness pattern. But the constants and the
+    measured numbers are this cohort's, and the display refuses to quote a rate
+    it has not measured on the data in front of it.
+\end{itemize}
+
+\paragraph{Hypotheses tested and rejected.} That AR(1) whitening costs power
+(it does not; the null attenuates identically). That a larger reference library
+lowers $h$ (twelve times more windows moved it by $0.4$). That drift could be
+removed with a population template on this dataset (there is no common drift to
+remove). Each was predicted, measured and abandoned.
+
+\begin{thebibliography}{9}
+\bibitem{alwan} L. C. Alwan and H. V. Roberts, Time-series modeling for statistical process control, \emph{J. Bus. Econ. Statist.} \textbf{6} (1988), 87--95.
+\bibitem{chatterjee} S. Chatterjee and P. Qiu, Distribution-free cumulative sum control charts using bootstrap-based control limits, \emph{Ann. Appl. Statist.} \textbf{3} (2009), 349--369.
+\bibitem{edgington} E. S. Edgington and P. Onghena, \emph{Randomization Tests}, 4th ed., Chapman and Hall/CRC, 2007.
+\bibitem{efron} B. Efron and R. J. Tibshirani, \emph{An Introduction to the Bootstrap}, Chapman and Hall, 1993.
+\bibitem{guyatt} G. H. Guyatt et al., Determining optimal therapy: randomized trials in individual patients, \emph{New England J. Med.} \textbf{314} (1986), 889--892.
+\bibitem{kunsch} H. R. K\"unsch, The jackknife and the bootstrap for general stationary observations, \emph{Ann. Statist.} \textbf{17} (1989), 1217--1241.
+\bibitem{lillie} E. O. Lillie et al., The n-of-1 clinical trial: the ultimate strategy for individualizing medicine?, \emph{Personalized Medicine} \textbf{8} (2011), 161--173.
+\bibitem{lorden} G. Lorden, Procedures for reacting to a change in distribution, \emph{Ann. Math. Statist.} \textbf{42} (1971), 1897--1908.
+\bibitem{montgomery} D. C. Montgomery, \emph{Introduction to Statistical Quality Control}, 7th ed., Wiley, 2013.
+\bibitem{page} E. S. Page, Continuous inspection schemes, \emph{Biometrika} \textbf{41} (1954), 100--115.
+\bibitem{stone} M. Stone, Cross-validatory choice and assessment of statistical predictions, \emph{J. Roy. Statist. Soc. B} \textbf{36} (1974), 111--147.
+\bibitem{wilson} E. B. Wilson, Probable inference, the law of succession, and statistical inference, \emph{J. Amer. Statist. Assoc.} \textbf{22} (1927), 209--212.
+\end{thebibliography}
+
+\end{document}
