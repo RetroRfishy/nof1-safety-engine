@@ -1,0 +1,1049 @@
+{
+  "procedure": {
+    "starts": [
+      60,
+      74,
+      88,
+      102
+    ],
+    "baseline_days": 60,
+    "horizon": 30,
+    "target_fp": 0.05,
+    "planted_shift_sd": 2.0
+  },
+  "resting_hr": {
+    "label": "Resting heart rate",
+    "unit": "bpm",
+    "harm_direction": "up",
+    "n_subjects": 13,
+    "n_windows": 43,
+    "library_windows": 876,
+    "skipped": [
+      "p04: series is 35 days; start day 60 leaves no days after start",
+      "p12: no fitbit/resting_heart_rate.json",
+      "p13: no fitbit/resting_heart_rate.json"
+    ],
+    "median_sd": 1.9033675939338768,
+    "median_phi": 0.7992818885151822,
+    "tail_3sd": 0.0008557980316645272,
+    "false_alarms": {
+      "reference": {
+        "alarmed": 3,
+        "windows": 43,
+        "rate": 0.06976744186046512,
+        "ci": [
+          0.024011589577214484,
+          0.18608986901241975
+        ],
+        "subjects_alarmed": [
+          "p05",
+          "p08"
+        ]
+      },
+      "own_baseline": {
+        "alarmed": 6,
+        "windows": 43,
+        "rate": 0.13953488372093023,
+        "ci": [
+          0.06555723427964878,
+          0.2726358796738286
+        ],
+        "subjects_alarmed": [
+          "p01",
+          "p05",
+          "p07",
+          "p08",
+          "p09"
+        ]
+      }
+    },
+    "detection": {
+      "reference": {
+        "caught": 23,
+        "windows": 43,
+        "rate": 0.5348837209302325,
+        "median_day": 13.0,
+        "iqr": [
+          10.0,
+          22.0
+        ]
+      },
+      "own_baseline": {
+        "caught": 34,
+        "windows": 43,
+        "rate": 0.7906976744186046,
+        "median_day": 11.0,
+        "iqr": [
+          8.25,
+          16.75
+        ]
+      }
+    },
+    "windows": [
+      {
+        "subject": "p01",
+        "offset": 60,
+        "start": "2019-12-31",
+        "h": 7.380236412413278,
+        "peak": 0.7438969050832187,
+        "alarm": false
+      },
+      {
+        "subject": "p01",
+        "offset": 74,
+        "start": "2020-01-14",
+        "h": 7.29925478852476,
+        "peak": 3.089431094276686,
+        "alarm": false
+      },
+      {
+        "subject": "p01",
+        "offset": 88,
+        "start": "2020-01-28",
+        "h": 7.435498080099751,
+        "peak": 4.364754585187146,
+        "alarm": false
+      },
+      {
+        "subject": "p01",
+        "offset": 102,
+        "start": "2020-02-11",
+        "h": 7.703538900152397,
+        "peak": 6.068596127448291,
+        "alarm": false
+      },
+      {
+        "subject": "p02",
+        "offset": 60,
+        "start": "2020-03-01",
+        "h": 7.033500799926561,
+        "peak": 2.7215604897932475,
+        "alarm": false
+      },
+      {
+        "subject": "p03",
+        "offset": 60,
+        "start": "2019-12-31",
+        "h": 7.384073296903053,
+        "peak": 0.7878116559041398,
+        "alarm": false
+      },
+      {
+        "subject": "p03",
+        "offset": 74,
+        "start": "2020-01-14",
+        "h": 7.500742347367918,
+        "peak": 1.8849365118243777,
+        "alarm": false
+      },
+      {
+        "subject": "p03",
+        "offset": 88,
+        "start": "2020-01-28",
+        "h": 7.64844381067715,
+        "peak": 1.98538759183767,
+        "alarm": false
+      },
+      {
+        "subject": "p03",
+        "offset": 102,
+        "start": "2020-02-11",
+        "h": 6.239534934490019,
+        "peak": 0.19676486985034575,
+        "alarm": false
+      },
+      {
+        "subject": "p05",
+        "offset": 60,
+        "start": "2020-02-26",
+        "h": 10.303414776979073,
+        "peak": 14.844471931752132,
+        "alarm": true
+      },
+      {
+        "subject": "p06",
+        "offset": 60,
+        "start": "2019-12-31",
+        "h": 9.713335911802712,
+        "peak": 4.84593308782759,
+        "alarm": false
+      },
+      {
+        "subject": "p06",
+        "offset": 74,
+        "start": "2020-01-14",
+        "h": 11.859495203179343,
+        "peak": 1.853089914762203,
+        "alarm": false
+      },
+      {
+        "subject": "p06",
+        "offset": 88,
+        "start": "2020-01-28",
+        "h": 11.010368700750167,
+        "peak": 1.7996900564699163,
+        "alarm": false
+      },
+      {
+        "subject": "p06",
+        "offset": 102,
+        "start": "2020-02-11",
+        "h": 10.688216292193456,
+        "peak": 5.229186328123989,
+        "alarm": false
+      },
+      {
+        "subject": "p07",
+        "offset": 60,
+        "start": "2020-01-04",
+        "h": 10.544952718397555,
+        "peak": 7.684985150477468,
+        "alarm": false
+      },
+      {
+        "subject": "p07",
+        "offset": 74,
+        "start": "2020-01-18",
+        "h": 9.800439022386517,
+        "peak": 1.6860201118040834,
+        "alarm": false
+      },
+      {
+        "subject": "p07",
+        "offset": 88,
+        "start": "2020-02-01",
+        "h": 11.066563608663685,
+        "peak": 1.7578429016263861,
+        "alarm": false
+      },
+      {
+        "subject": "p07",
+        "offset": 102,
+        "start": "2020-02-15",
+        "h": 9.80804219636409,
+        "peak": 1.685305825019592,
+        "alarm": false
+      },
+      {
+        "subject": "p08",
+        "offset": 60,
+        "start": "2020-01-09",
+        "h": 5.80739511075161,
+        "peak": 8.27877603912911,
+        "alarm": true
+      },
+      {
+        "subject": "p08",
+        "offset": 74,
+        "start": "2020-01-23",
+        "h": 6.83180006637295,
+        "peak": 11.759847809152205,
+        "alarm": true
+      },
+      {
+        "subject": "p08",
+        "offset": 88,
+        "start": "2020-02-06",
+        "h": 7.623556397237314,
+        "peak": 4.518503217682633,
+        "alarm": false
+      },
+      {
+        "subject": "p08",
+        "offset": 102,
+        "start": "2020-02-20",
+        "h": 8.638836884997684,
+        "peak": 1.3643448816201258,
+        "alarm": false
+      },
+      {
+        "subject": "p09",
+        "offset": 60,
+        "start": "2019-12-31",
+        "h": 11.81135521739782,
+        "peak": 7.684948269541091,
+        "alarm": false
+      },
+      {
+        "subject": "p09",
+        "offset": 74,
+        "start": "2020-01-14",
+        "h": 12.084902761639897,
+        "peak": 1.198074591966312,
+        "alarm": false
+      },
+      {
+        "subject": "p09",
+        "offset": 88,
+        "start": "2020-01-28",
+        "h": 11.566059879075384,
+        "peak": 1.1179100234924548,
+        "alarm": false
+      },
+      {
+        "subject": "p09",
+        "offset": 102,
+        "start": "2020-02-11",
+        "h": 12.186414861295138,
+        "peak": 3.235229887291776,
+        "alarm": false
+      },
+      {
+        "subject": "p10",
+        "offset": 60,
+        "start": "2020-01-04",
+        "h": 9.173231019512382,
+        "peak": 1.5673949882585116,
+        "alarm": false
+      },
+      {
+        "subject": "p10",
+        "offset": 74,
+        "start": "2020-01-18",
+        "h": 6.834141114313297,
+        "peak": 0.7877363508477719,
+        "alarm": false
+      },
+      {
+        "subject": "p10",
+        "offset": 88,
+        "start": "2020-02-01",
+        "h": 7.382861961081353,
+        "peak": 1.1582116066109962,
+        "alarm": false
+      },
+      {
+        "subject": "p10",
+        "offset": 102,
+        "start": "2020-02-15",
+        "h": 7.308548953195453,
+        "peak": 1.094878743953175,
+        "alarm": false
+      },
+      {
+        "subject": "p11",
+        "offset": 60,
+        "start": "2020-02-23",
+        "h": 8.601553545959112,
+        "peak": 4.331786183885833,
+        "alarm": false
+      },
+      {
+        "subject": "p14",
+        "offset": 60,
+        "start": "2020-01-12",
+        "h": 13.392804446200866,
+        "peak": 2.649889790618781,
+        "alarm": false
+      },
+      {
+        "subject": "p14",
+        "offset": 74,
+        "start": "2020-01-26",
+        "h": 12.03185931695446,
+        "peak": 2.3919557611200566,
+        "alarm": false
+      },
+      {
+        "subject": "p14",
+        "offset": 88,
+        "start": "2020-02-09",
+        "h": 13.040608998946592,
+        "peak": 0.5672928048084017,
+        "alarm": false
+      },
+      {
+        "subject": "p14",
+        "offset": 102,
+        "start": "2020-02-23",
+        "h": 12.496838769463801,
+        "peak": 0.7855361797220454,
+        "alarm": false
+      },
+      {
+        "subject": "p15",
+        "offset": 60,
+        "start": "2020-01-07",
+        "h": 10.917621685711023,
+        "peak": 3.876875790634724,
+        "alarm": false
+      },
+      {
+        "subject": "p15",
+        "offset": 74,
+        "start": "2020-01-21",
+        "h": 11.271556078764993,
+        "peak": 2.0599308879531573,
+        "alarm": false
+      },
+      {
+        "subject": "p15",
+        "offset": 88,
+        "start": "2020-02-04",
+        "h": 10.048857829432718,
+        "peak": 1.9431582176240796,
+        "alarm": false
+      },
+      {
+        "subject": "p15",
+        "offset": 102,
+        "start": "2020-02-18",
+        "h": 11.46384996481333,
+        "peak": 1.7463897770090324,
+        "alarm": false
+      },
+      {
+        "subject": "p16",
+        "offset": 60,
+        "start": "2019-12-31",
+        "h": 10.135121332447817,
+        "peak": 3.8028954900942256,
+        "alarm": false
+      },
+      {
+        "subject": "p16",
+        "offset": 74,
+        "start": "2020-01-14",
+        "h": 11.400019884942116,
+        "peak": 1.3213650926090745,
+        "alarm": false
+      },
+      {
+        "subject": "p16",
+        "offset": 88,
+        "start": "2020-01-28",
+        "h": 11.844711869815015,
+        "peak": 1.3387011605581955,
+        "alarm": false
+      },
+      {
+        "subject": "p16",
+        "offset": 102,
+        "start": "2020-02-11",
+        "h": 12.316392987793538,
+        "peak": 4.0988097182547465,
+        "alarm": false
+      }
+    ],
+    "unplanted_alarms": [
+      {
+        "subject": "p05",
+        "start": "2020-02-26",
+        "alarm": "2020-03-06",
+        "offset": 60
+      },
+      {
+        "subject": "p08",
+        "start": "2020-01-09",
+        "alarm": "2020-02-05",
+        "offset": 60
+      },
+      {
+        "subject": "p08",
+        "start": "2020-01-23",
+        "alarm": "2020-02-10",
+        "offset": 74
+      }
+    ],
+    "by_shift": [
+      {
+        "shift_sd": 0.5,
+        "shift_units": 0.9516837969669384,
+        "rate": 0.09302325581395349,
+        "median_day": 19.0
+      },
+      {
+        "shift_sd": 1.0,
+        "shift_units": 1.9033675939338768,
+        "rate": 0.20930232558139536,
+        "median_day": 18.0
+      },
+      {
+        "shift_sd": 1.5,
+        "shift_units": 2.8550513909008153,
+        "rate": 0.3023255813953488,
+        "median_day": 13.0
+      },
+      {
+        "shift_sd": 2.0,
+        "shift_units": 3.8067351878677536,
+        "rate": 0.5348837209302325,
+        "median_day": 13.0
+      },
+      {
+        "shift_sd": 3.0,
+        "shift_units": 5.710102781801631,
+        "rate": 0.813953488372093,
+        "median_day": 12.0
+      }
+    ]
+  },
+  "sleep_efficiency": {
+    "label": "Sleep efficiency",
+    "unit": "%",
+    "harm_direction": "down",
+    "n_subjects": 15,
+    "n_windows": 56,
+    "library_windows": 967,
+    "skipped": [
+      "p12: series is 1 days; start day 60 leaves no days after start"
+    ],
+    "median_sd": 2.6916039613103178,
+    "median_phi": 0.08714455479161357,
+    "tail_3sd": 0.010371959942775394,
+    "false_alarms": {
+      "reference": {
+        "alarmed": 3,
+        "windows": 56,
+        "rate": 0.05357142857142857,
+        "ci": [
+          0.018385781382109126,
+          0.14607309068821533
+        ],
+        "subjects_alarmed": [
+          "p08",
+          "p14"
+        ]
+      },
+      "own_baseline": {
+        "alarmed": 6,
+        "windows": 56,
+        "rate": 0.10714285714285714,
+        "ci": [
+          0.05003935571117074,
+          0.21468445171071482
+        ],
+        "subjects_alarmed": [
+          "p08",
+          "p09",
+          "p14",
+          "p16"
+        ]
+      }
+    },
+    "detection": {
+      "reference": {
+        "caught": 47,
+        "windows": 56,
+        "rate": 0.8392857142857143,
+        "median_day": 12.0,
+        "iqr": [
+          10.0,
+          15.5
+        ]
+      },
+      "own_baseline": {
+        "caught": 50,
+        "windows": 56,
+        "rate": 0.8928571428571429,
+        "median_day": 11.0,
+        "iqr": [
+          9.0,
+          14.0
+        ]
+      }
+    },
+    "windows": [
+      {
+        "subject": "p01",
+        "offset": 60,
+        "start": "2020-01-01",
+        "h": 4.992303898662808,
+        "peak": 3.462867807234307,
+        "alarm": false
+      },
+      {
+        "subject": "p01",
+        "offset": 74,
+        "start": "2020-01-15",
+        "h": 4.920177954006583,
+        "peak": 0.7635721560004284,
+        "alarm": false
+      },
+      {
+        "subject": "p01",
+        "offset": 88,
+        "start": "2020-01-29",
+        "h": 4.837813883268242,
+        "peak": 0.3971068521462331,
+        "alarm": false
+      },
+      {
+        "subject": "p01",
+        "offset": 102,
+        "start": "2020-02-12",
+        "h": 4.680645409761004,
+        "peak": 0.7460200032993815,
+        "alarm": false
+      },
+      {
+        "subject": "p02",
+        "offset": 60,
+        "start": "2020-01-05",
+        "h": 4.633251508953283,
+        "peak": 0.4514268541947206,
+        "alarm": false
+      },
+      {
+        "subject": "p02",
+        "offset": 74,
+        "start": "2020-01-19",
+        "h": 4.275761845775866,
+        "peak": 0.2949948657047222,
+        "alarm": false
+      },
+      {
+        "subject": "p02",
+        "offset": 88,
+        "start": "2020-02-02",
+        "h": 4.705649525248426,
+        "peak": 0.48710407108335496,
+        "alarm": false
+      },
+      {
+        "subject": "p02",
+        "offset": 102,
+        "start": "2020-02-16",
+        "h": 4.822043277094387,
+        "peak": 0.9606881341923369,
+        "alarm": false
+      },
+      {
+        "subject": "p03",
+        "offset": 60,
+        "start": "2020-01-01",
+        "h": 4.7990570068015135,
+        "peak": 0.0,
+        "alarm": false
+      },
+      {
+        "subject": "p03",
+        "offset": 74,
+        "start": "2020-01-15",
+        "h": 5.088336041922961,
+        "peak": 0.021341987347979763,
+        "alarm": false
+      },
+      {
+        "subject": "p03",
+        "offset": 88,
+        "start": "2020-01-29",
+        "h": 5.027117465883778,
+        "peak": 0.24169349067264445,
+        "alarm": false
+      },
+      {
+        "subject": "p03",
+        "offset": 102,
+        "start": "2020-02-12",
+        "h": 3.1972423569636894,
+        "peak": 0.0,
+        "alarm": false
+      },
+      {
+        "subject": "p04",
+        "offset": 60,
+        "start": "2020-01-06",
+        "h": 4.765404623762688,
+        "peak": 0.5340241688381744,
+        "alarm": false
+      },
+      {
+        "subject": "p04",
+        "offset": 74,
+        "start": "2020-01-20",
+        "h": 3.911896618810653,
+        "peak": 1.127721668704917,
+        "alarm": false
+      },
+      {
+        "subject": "p04",
+        "offset": 88,
+        "start": "2020-02-03",
+        "h": 4.797922870704372,
+        "peak": 1.154293968880529,
+        "alarm": false
+      },
+      {
+        "subject": "p04",
+        "offset": 102,
+        "start": "2020-02-17",
+        "h": 3.859668396920359,
+        "peak": 0.42004876110572575,
+        "alarm": false
+      },
+      {
+        "subject": "p05",
+        "offset": 60,
+        "start": "2020-01-01",
+        "h": 4.43994174787923,
+        "peak": 1.4895089307186429,
+        "alarm": false
+      },
+      {
+        "subject": "p05",
+        "offset": 74,
+        "start": "2020-01-15",
+        "h": 3.825806419297605,
+        "peak": 0.0,
+        "alarm": false
+      },
+      {
+        "subject": "p05",
+        "offset": 88,
+        "start": "2020-01-29",
+        "h": 3.2879920395969475,
+        "peak": 0.0,
+        "alarm": false
+      },
+      {
+        "subject": "p05",
+        "offset": 102,
+        "start": "2020-02-12",
+        "h": 3.700257534186542,
+        "peak": 0.16949220490294858,
+        "alarm": false
+      },
+      {
+        "subject": "p06",
+        "offset": 60,
+        "start": "2020-01-01",
+        "h": 3.916112752462451,
+        "peak": 0.0,
+        "alarm": false
+      },
+      {
+        "subject": "p06",
+        "offset": 74,
+        "start": "2020-01-15",
+        "h": 4.4688832413697686,
+        "peak": 0.2738788407167102,
+        "alarm": false
+      },
+      {
+        "subject": "p06",
+        "offset": 88,
+        "start": "2020-01-29",
+        "h": 4.830944157988232,
+        "peak": 0.15129889520825412,
+        "alarm": false
+      },
+      {
+        "subject": "p06",
+        "offset": 102,
+        "start": "2020-02-12",
+        "h": 4.9186323455237675,
+        "peak": 1.54168818551058,
+        "alarm": false
+      },
+      {
+        "subject": "p07",
+        "offset": 60,
+        "start": "2020-01-06",
+        "h": 4.900237272684256,
+        "peak": 2.8494184257118125,
+        "alarm": false
+      },
+      {
+        "subject": "p07",
+        "offset": 74,
+        "start": "2020-01-20",
+        "h": 4.970505492385061,
+        "peak": 0.17650319297288497,
+        "alarm": false
+      },
+      {
+        "subject": "p07",
+        "offset": 88,
+        "start": "2020-02-03",
+        "h": 5.047984590396332,
+        "peak": 2.1244189371013444,
+        "alarm": false
+      },
+      {
+        "subject": "p07",
+        "offset": 102,
+        "start": "2020-02-17",
+        "h": 5.142802445635155,
+        "peak": 2.381016833789175,
+        "alarm": false
+      },
+      {
+        "subject": "p08",
+        "offset": 60,
+        "start": "2020-01-11",
+        "h": 3.4102419239348403,
+        "peak": 6.4041969044037925,
+        "alarm": true
+      },
+      {
+        "subject": "p08",
+        "offset": 74,
+        "start": "2020-01-25",
+        "h": 3.9198945268689087,
+        "peak": 0.05130892255599917,
+        "alarm": false
+      },
+      {
+        "subject": "p08",
+        "offset": 88,
+        "start": "2020-02-08",
+        "h": 4.243535173997434,
+        "peak": 0.16815173424768726,
+        "alarm": false
+      },
+      {
+        "subject": "p08",
+        "offset": 102,
+        "start": "2020-02-22",
+        "h": 4.914518651792325,
+        "peak": 0.555930248722752,
+        "alarm": false
+      },
+      {
+        "subject": "p09",
+        "offset": 60,
+        "start": "2019-12-31",
+        "h": 3.6818184862185195,
+        "peak": 2.777993236026342,
+        "alarm": false
+      },
+      {
+        "subject": "p09",
+        "offset": 74,
+        "start": "2020-01-14",
+        "h": 3.586454187187342,
+        "peak": 0.42261597948457164,
+        "alarm": false
+      },
+      {
+        "subject": "p09",
+        "offset": 88,
+        "start": "2020-01-28",
+        "h": 3.5410506800666357,
+        "peak": 0.4358344851388122,
+        "alarm": false
+      },
+      {
+        "subject": "p09",
+        "offset": 102,
+        "start": "2020-02-11",
+        "h": 3.467660105233689,
+        "peak": 3.1649353205533126,
+        "alarm": false
+      },
+      {
+        "subject": "p10",
+        "offset": 60,
+        "start": "2020-01-07",
+        "h": 4.622561671681819,
+        "peak": 0.9655025019116469,
+        "alarm": false
+      },
+      {
+        "subject": "p10",
+        "offset": 74,
+        "start": "2020-01-21",
+        "h": 4.537757534330285,
+        "peak": 0.9294793874907641,
+        "alarm": false
+      },
+      {
+        "subject": "p11",
+        "offset": 60,
+        "start": "2020-01-15",
+        "h": 3.608036170594712,
+        "peak": 1.3686360351105409,
+        "alarm": false
+      },
+      {
+        "subject": "p11",
+        "offset": 74,
+        "start": "2020-01-29",
+        "h": 3.5494087956739557,
+        "peak": 1.2735569107374098,
+        "alarm": false
+      },
+      {
+        "subject": "p11",
+        "offset": 88,
+        "start": "2020-02-12",
+        "h": 3.640414678897185,
+        "peak": 0.0,
+        "alarm": false
+      },
+      {
+        "subject": "p13",
+        "offset": 60,
+        "start": "2020-01-12",
+        "h": 2.369678660698491,
+        "peak": 0.0,
+        "alarm": false
+      },
+      {
+        "subject": "p13",
+        "offset": 74,
+        "start": "2020-01-26",
+        "h": 2.743174674425052,
+        "peak": 0.0,
+        "alarm": false
+      },
+      {
+        "subject": "p13",
+        "offset": 88,
+        "start": "2020-02-09",
+        "h": Infinity,
+        "peak": 0.0,
+        "alarm": false
+      },
+      {
+        "subject": "p14",
+        "offset": 60,
+        "start": "2020-01-14",
+        "h": 4.523730354407789,
+        "peak": 5.316025077034473,
+        "alarm": true
+      },
+      {
+        "subject": "p14",
+        "offset": 74,
+        "start": "2020-01-28",
+        "h": 3.9359345898637197,
+        "peak": 5.193256019558825,
+        "alarm": true
+      },
+      {
+        "subject": "p14",
+        "offset": 88,
+        "start": "2020-02-11",
+        "h": 3.4674396889426964,
+        "peak": 0.0,
+        "alarm": false
+      },
+      {
+        "subject": "p14",
+        "offset": 102,
+        "start": "2020-02-25",
+        "h": 3.557823065255076,
+        "peak": 0.20112588707820378,
+        "alarm": false
+      },
+      {
+        "subject": "p15",
+        "offset": 60,
+        "start": "2020-01-09",
+        "h": 3.2413999942143428,
+        "peak": 0.0,
+        "alarm": false
+      },
+      {
+        "subject": "p15",
+        "offset": 74,
+        "start": "2020-01-23",
+        "h": 3.312116271315142,
+        "peak": 1.126581323231686,
+        "alarm": false
+      },
+      {
+        "subject": "p15",
+        "offset": 88,
+        "start": "2020-02-06",
+        "h": 3.364660188740555,
+        "peak": 1.4279934540367958,
+        "alarm": false
+      },
+      {
+        "subject": "p15",
+        "offset": 102,
+        "start": "2020-02-20",
+        "h": 3.5874321794858632,
+        "peak": 0.8600400108963802,
+        "alarm": false
+      },
+      {
+        "subject": "p16",
+        "offset": 60,
+        "start": "2019-12-31",
+        "h": 4.852822830061269,
+        "peak": 1.5285234799509984,
+        "alarm": false
+      },
+      {
+        "subject": "p16",
+        "offset": 74,
+        "start": "2020-01-14",
+        "h": 3.4900910700839227,
+        "peak": 0.0,
+        "alarm": false
+      },
+      {
+        "subject": "p16",
+        "offset": 88,
+        "start": "2020-01-28",
+        "h": 3.4626261703706045,
+        "peak": 0.6478089284384949,
+        "alarm": false
+      },
+      {
+        "subject": "p16",
+        "offset": 102,
+        "start": "2020-02-11",
+        "h": 3.286870771703806,
+        "peak": 2.4677361726154907,
+        "alarm": false
+      }
+    ],
+    "unplanted_alarms": [
+      {
+        "subject": "p08",
+        "start": "2020-01-11",
+        "alarm": "2020-01-13",
+        "offset": 60
+      },
+      {
+        "subject": "p14",
+        "start": "2020-01-14",
+        "alarm": "2020-01-29",
+        "offset": 60
+      },
+      {
+        "subject": "p14",
+        "start": "2020-01-28",
+        "alarm": "2020-01-29",
+        "offset": 74
+      }
+    ],
+    "by_shift": [
+      {
+        "shift_sd": 0.5,
+        "shift_units": 1.3458019806551589,
+        "rate": 0.125,
+        "median_day": 15.0
+      },
+      {
+        "shift_sd": 1.0,
+        "shift_units": 2.6916039613103178,
+        "rate": 0.23214285714285715,
+        "median_day": 15.0
+      },
+      {
+        "shift_sd": 1.5,
+        "shift_units": 4.037405941965477,
+        "rate": 0.6071428571428571,
+        "median_day": 14.0
+      },
+      {
+        "shift_sd": 2.0,
+        "shift_units": 5.3832079226206355,
+        "rate": 0.8392857142857143,
+        "median_day": 12.0
+      },
+      {
+        "shift_sd": 3.0,
+        "shift_units": 8.074811883930954,
+        "rate": 0.9642857142857143,
+        "median_day": 9.0
+      }
+    ]
+  }
+}

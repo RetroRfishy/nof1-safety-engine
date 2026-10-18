@@ -1,0 +1,7 @@
+.venv/
+__pycache__/
+_backup_before_sleep/
+_backup_before_demo/
+_preview/
+alarms.jsonl
+.DS_Store
